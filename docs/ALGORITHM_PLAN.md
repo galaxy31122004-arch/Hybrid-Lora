@@ -30,6 +30,14 @@ Node điều khiển và giám sát đèn; Gateway quản lý nhiều Node; Gate
 
 V1 ưu tiên mô hình **LoRa 1 = RX / LoRa 2 = TX** ở mức logic. Nếu PHY/channel cuối cùng yêu cầu khác, có thể đổi vai trò bằng cấu hình mà không thay đổi packet format.
 
+Hai radio dùng chung SPI theo schematic: MOSI/MISO/SCK chung, CS riêng. Một
+bộ điều phối sở hữu bus, chỉ cho phép một SPI transaction tại một thời điểm;
+ISR radio chỉ báo sự kiện để bộ điều phối xử lý. Giữ CS của cả hai radio ở
+mức không chọn khi khởi tạo. Việc LoRa 2 TX có làm LoRa 1 mất RX hay không
+phải đo trên PCB thật trước khi cho phép hai radio hoạt động đồng thời.
+Nếu chọn hai channel khác nhau, Node một-radio còn cần lịch chuyển channel
+và cửa sổ nghe COMMAND; chưa có lịch này trong V1.
+
 ## Công việc chính của Node
 
 ### N1 — Khởi tạo
@@ -58,6 +66,15 @@ Tách **Operating Mode** khỏi **Communication Status**:
 - REMOTE + OFFLINE: chuyển sang fallback/local policy
 - Link phục hồi: đồng bộ trạng thái rồi nhận command mới
 
+Communication Status ở Node chỉ được cập nhật từ packet Gateway hợp lệ.
+HEARTBEAT Node -> Gateway không chứng minh Gateway còn online với Node.
+Vì Gateway có thể im lặng khi không có COMMAND, phải chốt tín hiệu định kỳ
+từ Gateway và chu kỳ của nó trước khi đặt timeout fallback. Khi timeout,
+giữ Operating Mode=REMOTE nhưng chạy fallback policy. Khi link phục hồi,
+Node báo STATUS trạng thái thực tế; Gateway đối chiếu trạng thái đó trước
+khi áp dụng command cũ còn trong queue. Quy tắc chuyển đèn cụ thể khi vào
+fallback vẫn phải chốt ở Phase A.
+
 ### N5 — LoRa manager
 - RX/TX
 - CRC16
@@ -68,7 +85,7 @@ Tách **Operating Mode** khỏi **Communication Status**:
 
 ### N6 — Heartbeat / Status
 - Heartbeat định kỳ để Gateway biết Node còn online
-- STATUS chứa relay state và sensor/fault cần thiết
+- STATUS chứa relay state và lux; HEARTBEAT mang các cờ sức khỏe đã định nghĩa
 - Ưu tiên một packet vừa đủ thay vì nhiều packet nhỏ
 
 ### N7 — Fault handling
@@ -85,6 +102,8 @@ Gateway có hai radio nhưng **một bộ điều phối chung**:
 - LoRa 2: ưu tiên TX COMMAND/ACK-related traffic
 - Không để hai radio tự chạy độc lập không kiểm soát
 - ESP32 duy trì queue TX và bảng trạng thái Node
+- Mọi thao tác SPI đi qua cùng một bộ điều phối; không cho hai task truy cập
+  LoRa độc lập hoặc giữ mutex trong lúc chờ ACK qua vô tuyến
 
 ### G2 — RX pipeline
 Luồng nhận:
@@ -129,6 +148,8 @@ Gateway lưu tối thiểu:
 - Timeout thì retry cùng COMMAND/SEQ.
 - Tối đa 3 retry ở V1.
 - ACK đúng SEQ thì kết thúc transaction.
+- Kiểm tra cả NODE_ID nguồn, ACK_SEQ và RESULT; ACK lỗi kết thúc transaction
+  với trạng thái lỗi, không báo thành công.
 - Duplicate COMMAND ở Node không được thực thi lần hai.
 
 ## Gateway main flow
@@ -210,6 +231,12 @@ SEQ trùng: không execute lại, resend ACK nếu command yêu cầu.
 ## Reliability
 Command quan trọng cần ACK. Timeout chọn sau khi đo Time-on-Air thực tế. Retry tối đa 3 lần là giá trị khởi đầu. STATUS/HEARTBEAT định kỳ không nhất thiết ACK từng packet.
 
+Nếu timer bắt đầu ngay trước khi gửi COMMAND, giá trị khởi đầu phải lớn hơn
+`ToA_COMMAND + radio_turnaround + Node_processing + ToA_ACK + scheduling_jitter`.
+Tính các thành phần theo SF/BW/CR/preamble và đo lại trên phần cứng; tăng
+margin theo packet loss và độ trễ queue thực tế. Không chốt một số mili giây
+chung cho mọi cấu hình PHY.
+
 ## Tối ưu LoRa
 
 Ưu tiên:
@@ -236,3 +263,7 @@ Không tách một STATUS thành nhiều packet chỉ để giảm vài byte. V�
 - ACK timeout dựa trên ToA đo thực tế
 - Channel/tần số riêng cho LoRa 1 và LoRa 2 nếu cần
 - Cơ chế chống collision cuối cùng cho nhiều Node
+- Packet/schedule tín hiệu Gateway định kỳ và timeout fallback tương ứng
+- Cách khởi tạo/đồng bộ DS3231, giá trị timestamp khi RTC lỗi
+- Quy tắc làm tròn/giới hạn LUX và biểu diễn khi BH1750 lỗi
+- Xác thực COMMAND trước khi triển khai trên kênh radio không tin cậy

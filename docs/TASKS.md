@@ -6,6 +6,8 @@
 - [ ] Chốt Gateway state machine
 - [ ] Chốt sensor list
 - [ ] Chốt local fallback behavior
+- [ ] Chốt pinout từ schematic CAD và kiểm tra GPIO boot strap
+- [ ] Chốt cách khởi tạo RTC và dữ liệu sensor khi lỗi
 
 ## Phase B — Communication
 - [ ] LoRa initialization
@@ -16,6 +18,8 @@
 - [ ] Timeout/retry
 - [ ] Duplicate packet handling
 - [ ] Corrupted packet handling
+- [ ] Chốt tín hiệu Gateway định kỳ cho Node phát hiện mất link
+- [ ] Chốt phương án xác thực COMMAND trước triển khai thực tế
 
 ## Phase C — Node
 - [ ] Relay/contactor control abstraction
@@ -31,6 +35,7 @@
 - [ ] Node table
 - [ ] Last Seen timeout
 - [ ] LoRa RX/TX manager
+- [ ] Một bộ điều phối SPI cho hai radio và đo nhiễu TX/RX trên PCB
 - [ ] Server bridge
 - [ ] Command queue/priority
 - [ ] Online/offline tracking
