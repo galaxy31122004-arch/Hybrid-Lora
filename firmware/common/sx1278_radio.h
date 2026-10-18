@@ -23,7 +23,7 @@ class Sx1278Radio {
     write_reg(0x0F, 0x00);  // FIFO RX base
     write_reg(0x12, 0xFF);  // clear IRQs
     write_reg(0x11, 0x00);  // unmask IRQs
-    write_reg(0x01, 0x85);  // standby + LoRa mode
+    write_reg(0x01, 0x86);  // continuous RX + LoRa mode
     return (read_reg(0x42) != 0);
   }
 
@@ -35,10 +35,19 @@ class Sx1278Radio {
     write_reg(0x22, static_cast<uint8_t>(size));
     write_reg(0x12, 0xFF);
     write_reg(0x01, 0x83);  // TX
+    transmitting_ = true;
     return true;
   }
 
-  bool packet_available() const { return digitalRead(dio0_) == HIGH; }
+  bool packet_available() {
+    if (transmitting_) {
+      if ((read_reg(0x12) & 0x08) == 0) return false;  // TxDone
+      write_reg(0x12, 0x08);
+      start_receive();
+      return false;
+    }
+    return digitalRead(dio0_) == HIGH;
+  }
 
   size_t receive(uint8_t* out, size_t capacity) {
     if (out == nullptr || capacity == 0) return 0;
@@ -47,6 +56,7 @@ class Sx1278Radio {
     write_reg(0x0D, read_reg(0x10));
     for (size_t i = 0; i < count; ++i) out[i] = read_reg(0x00);
     write_reg(0x12, 0xFF);
+    start_receive();
     return count;
   }
 
@@ -56,6 +66,11 @@ class Sx1278Radio {
     delay(1);
     digitalWrite(reset_, HIGH);
     delay(5);
+  }
+
+  void start_receive() {
+    write_reg(0x01, 0x86);  // continuous RX + LoRa mode
+    transmitting_ = false;
   }
 
   uint8_t read_reg(uint8_t address) const {
@@ -81,4 +96,5 @@ class Sx1278Radio {
   int cs_;
   int reset_;
   int dio0_;
+  bool transmitting_{false};
 };
