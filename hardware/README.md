@@ -2,6 +2,8 @@
 
 Source BOM: user-provided export dated 2026-10-06.
 
+Schematic screenshot review: [SCHEMATIC_REVIEW.md](SCHEMATIC_REVIEW.md).
+
 ## Main hardware
 
 - ESP32-S module: 1
