@@ -1,5 +1,7 @@
 #include "packet.h"
 
+#include <initializer_list>
+
 namespace hybrid_lora::packet {
 namespace {
 
@@ -12,7 +14,88 @@ bool valid_frame(const Frame& frame) {
          frame.payload.size() == expected_payload_size(frame.type);
 }
 
+Frame payload_frame(Type type, uint8_t node_id, uint8_t seq,
+                    std::initializer_list<uint8_t> payload) {
+  return Frame{type, node_id, seq, std::vector<uint8_t>(payload)};
+}
+
 }  // namespace
+
+Frame make_command(uint8_t node_id, uint8_t seq, uint8_t command, uint8_t param) {
+  return payload_frame(Type::Command, node_id, seq, {command, param});
+}
+
+Frame make_ack(uint8_t node_id, uint8_t seq, uint8_t command_seq, uint8_t result) {
+  return payload_frame(Type::Ack, node_id, seq, {command_seq, result});
+}
+
+Frame make_status(uint8_t node_id, uint8_t seq, uint32_t timestamp,
+                  uint16_t lux, uint8_t light_state, uint8_t mode) {
+  return Frame{Type::Status, node_id, seq,
+               {static_cast<uint8_t>(timestamp),
+                static_cast<uint8_t>(timestamp >> 8),
+                static_cast<uint8_t>(timestamp >> 16),
+                static_cast<uint8_t>(timestamp >> 24),
+                static_cast<uint8_t>(lux), static_cast<uint8_t>(lux >> 8),
+                light_state, mode}};
+}
+
+Frame make_heartbeat(uint8_t node_id, uint8_t seq, uint8_t flags) {
+  return payload_frame(Type::Heartbeat, node_id, seq, {flags});
+}
+
+bool read_command(const Frame& frame, CommandPayload& payload) {
+  if (frame.type != Type::Command || frame.payload.size() != 2) return false;
+  payload = {frame.payload[0], frame.payload[1]};
+  return true;
+}
+
+bool read_ack(const Frame& frame, AckPayload& payload) {
+  if (frame.type != Type::Ack || frame.payload.size() != 2) return false;
+  payload = {frame.payload[0], frame.payload[1]};
+  return true;
+}
+
+bool read_status(const Frame& frame, StatusPayload& payload) {
+  if (frame.type != Type::Status || frame.payload.size() != 8) return false;
+  payload.timestamp = static_cast<uint32_t>(frame.payload[0]) |
+                      static_cast<uint32_t>(frame.payload[1]) << 8 |
+                      static_cast<uint32_t>(frame.payload[2]) << 16 |
+                      static_cast<uint32_t>(frame.payload[3]) << 24;
+  payload.lux = static_cast<uint16_t>(frame.payload[4]) |
+                static_cast<uint16_t>(frame.payload[5]) << 8;
+  payload.light_state = frame.payload[6];
+  payload.mode = frame.payload[7];
+  return true;
+}
+
+bool read_heartbeat(const Frame& frame, HeartbeatPayload& payload) {
+  if (frame.type != Type::Heartbeat || frame.payload.size() != 1) return false;
+  payload.flags = frame.payload[0];
+  return true;
+}
+
+CommandDisposition CommandReplayCache::classify(const Frame& frame) const {
+  if (!has_value_ || frame.type != Type::Command || frame.node_id != node_id_ ||
+      frame.payload.size() != 2) {
+    return CommandDisposition::New;
+  }
+  if (frame.seq != seq_) return CommandDisposition::New;
+  if (frame.payload[0] == command_ && frame.payload[1] == param_) {
+    return CommandDisposition::Duplicate;
+  }
+  return CommandDisposition::Conflict;
+}
+
+void CommandReplayCache::remember(const Frame& frame, uint8_t result) {
+  if (frame.type != Type::Command || frame.payload.size() != 2) return;
+  has_value_ = true;
+  node_id_ = frame.node_id;
+  seq_ = frame.seq;
+  command_ = frame.payload[0];
+  param_ = frame.payload[1];
+  result_ = result;
+}
 
 uint16_t crc16_ccitt(const uint8_t* data, std::size_t size) {
   uint16_t crc = 0xFFFF;

@@ -26,6 +26,54 @@ struct DecodeResult {
   Frame frame{};
 };
 
+struct CommandPayload {
+  uint8_t command{};
+  uint8_t param{};
+};
+
+struct AckPayload {
+  uint8_t command_seq{};
+  uint8_t result{};
+};
+
+struct StatusPayload {
+  uint32_t timestamp{};
+  uint16_t lux{};
+  uint8_t light_state{};
+  uint8_t mode{};
+};
+
+struct HeartbeatPayload {
+  uint8_t flags{};
+};
+
+Frame make_command(uint8_t node_id, uint8_t seq, uint8_t command, uint8_t param);
+Frame make_ack(uint8_t node_id, uint8_t seq, uint8_t command_seq, uint8_t result);
+Frame make_status(uint8_t node_id, uint8_t seq, uint32_t timestamp,
+                  uint16_t lux, uint8_t light_state, uint8_t mode);
+Frame make_heartbeat(uint8_t node_id, uint8_t seq, uint8_t flags);
+bool read_command(const Frame& frame, CommandPayload& payload);
+bool read_ack(const Frame& frame, AckPayload& payload);
+bool read_status(const Frame& frame, StatusPayload& payload);
+bool read_heartbeat(const Frame& frame, HeartbeatPayload& payload);
+
+enum class CommandDisposition : uint8_t { New, Duplicate, Conflict };
+
+class CommandReplayCache {
+ public:
+  CommandDisposition classify(const Frame& frame) const;
+  void remember(const Frame& frame, uint8_t result);
+  uint8_t last_result() const { return result_; }
+
+ private:
+  bool has_value_{false};
+  uint8_t node_id_{};
+  uint8_t seq_{};
+  uint8_t command_{};
+  uint8_t param_{};
+  uint8_t result_{};
+};
+
 uint16_t crc16_ccitt(const uint8_t* data, std::size_t size);
 std::vector<uint8_t> encode(const Frame& frame);
 DecodeResult decode(const uint8_t* data, std::size_t size);

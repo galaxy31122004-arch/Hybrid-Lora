@@ -12,3 +12,7 @@ target_link_libraries(packet_tests PRIVATE hybrid_lora_packet)
 
 enable_testing()
 add_test(NAME packet_tests COMMAND packet_tests)
+
+add_executable(packet_semantics_tests tests/packet/test_semantics.cpp)
+target_link_libraries(packet_semantics_tests PRIVATE hybrid_lora_packet)
+add_test(NAME packet_semantics_tests COMMAND packet_semantics_tests)
