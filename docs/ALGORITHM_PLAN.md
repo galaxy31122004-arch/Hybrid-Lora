@@ -69,8 +69,11 @@ Tách **Operating Mode** khỏi **Communication Status**:
 
 Communication Status ở Node chỉ được cập nhật từ packet Gateway hợp lệ.
 HEARTBEAT Node -> Gateway không chứng minh Gateway còn online với Node.
-Vì Gateway có thể im lặng khi không có COMMAND, phải chốt tín hiệu định kỳ
-từ Gateway và chu kỳ của nó trước khi đặt timeout fallback. Khi timeout,
+V1 dùng BEACON addressed (TYPE 0x05, payload 0) làm liveness Gateway -> Node:
+lịch khởi đầu một BEACON mỗi 30s cho mỗi Node; Node vào REMOTE fallback sau
+90s không nhận BEACON hợp lệ đúng địa chỉ (ba kỳ liên tiếp). COMMAND hợp lệ
+có thể refresh cùng deadline nhưng không thay thế lịch BEACON định kỳ; lịch
+30s/90s phải đo và xác nhận lại trên phần cứng. Khi timeout,
 giữ Operating Mode=REMOTE nhưng chạy fallback policy. Khi link phục hồi,
 Node báo STATUS trạng thái thực tế; Gateway đối chiếu trạng thái đó trước
 khi áp dụng command cũ còn trong queue. Quy tắc chuyển đèn cụ thể khi vào
