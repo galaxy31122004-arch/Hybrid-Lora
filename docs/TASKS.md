@@ -8,6 +8,8 @@
 - [ ] Chốt local fallback behavior
 - [ ] Chốt pinout từ schematic CAD và kiểm tra GPIO boot strap
 - [ ] Chốt cách khởi tạo RTC và dữ liệu sensor khi lỗi
+- [ ] Chốt relay feedback và ý nghĩa LIGHT_STATE
+- [ ] Nạp NODE_ID cố định khi commissioning và kiểm tra trùng ID
 
 ## Phase B — Communication
 - [ ] LoRa initialization
@@ -19,6 +21,7 @@
 - [ ] Duplicate packet handling
 - [ ] Corrupted packet handling
 - [ ] Chốt tín hiệu Gateway định kỳ cho Node phát hiện mất link
+- [ ] Implement BEACON lịch 30s và fallback timeout khởi đầu 90s
 - [ ] Chốt phương án xác thực COMMAND trước triển khai thực tế
 
 ## Phase C — Node
@@ -39,6 +42,7 @@
 - [ ] Server bridge
 - [ ] Command queue/priority
 - [ ] Online/offline tracking
+- [ ] Rate limit/coalesce Wi-Fi uplink theo Node table
 
 ## Phase E — Optimization
 - [ ] Measure LoRa Time-on-Air

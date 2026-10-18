@@ -51,7 +51,8 @@ và cửa sổ nghe COMMAND; chưa có lịch này trong V1.
 - Nhận ON/OFF từ Gateway
 - Validate command
 - Thực thi và cập nhật relay state
-- Không thực thi lại command trùng SEQ
+- Lưu `last_SEQ`, payload cuối và `last_RESULT`; chỉ resend ACK khi cả SEQ
+  và payload trùng command gần nhất. Trùng SEQ khác payload là protocol error.
 
 ### N3 — Cảm biến
 - Đọc cảm biến theo chu kỳ
@@ -86,13 +87,23 @@ fallback vẫn phải chốt ở Phase A.
 ### N6 — Heartbeat / Status
 - Heartbeat định kỳ để Gateway biết Node còn online
 - STATUS chứa relay state và lux; HEARTBEAT mang các cờ sức khỏe đã định nghĩa
+- BH1750 lỗi: STATUS.LUX=`0xFFFF` và clear bit `BH1750 OK`.
+- DS3231 chưa set/lỗi: STATUS.TIMESTAMP=0 và clear bit `DS3231 OK`.
+- `LIGHT_STATE` chỉ là commanded output state ở V1; không được coi là tiếp
+  điểm relay thực tế vì schematic chưa có mạch feedback.
 - Ưu tiên một packet vừa đủ thay vì nhiều packet nhỏ
 
 ### N7 — Fault handling
 - Phát hiện lỗi sensor/LoRa/driver
-- Fault flags
+- Fault flags: DS3231/BH1750/LoRa/output map vào HEARTBEAT STATUS_FLAGS
 - Trạng thái an toàn đã định nghĩa
 - Báo lỗi khi có thể
+
+NODE_ID được nạp cố định trong firmware/configuration khi commissioning, chỉ
+dùng `0x01..0xFE`. Gateway duy trì danh sách ID đã cấp và cảnh báo khi nhận
+cùng một ID từ các nguồn RF không nhất quán (RSSI/SNR hoặc trạng thái thay
+đổi bất thường); đây là cảnh báo commissioning, không phải cơ chế định danh
+bảo mật. Không tự động cấp lại ID trên không trung trong V1.
 
 ## Công việc chính của Gateway
 
@@ -112,15 +123,23 @@ Luồng nhận:
 LoRa RX
   -> packet available?
   -> read packet
-  -> length check
+  -> require at least 6 bytes
+  -> read LEN and require physical length == 6 + LEN
+  -> check known TYPE and exact fixed LEN
+  -> check NODE_ID in 0x01..0xFE
   -> CRC check
-  -> parse TYPE/NODE_ID/SEQ
-  -> update Node table
-  -> route STATUS/HEARTBEAT/ACK
+  -> dispatch valid packet
+  -> update Node table only for STATUS/HEARTBEAT
+  -> refresh BEACON liveness only for addressed BEACON
+  -> close ACK transaction (ACK does not update Last Seen)
   -> tạo task/response nếu cần
 ```
 
 CRC sai thì bỏ packet, không tạo ACK.
+
+LoRa RSSI/SNR được đọc ngay sau khi nhận packet hợp lệ từ radio và gắn với
+STATUS/HEARTBEAT trong Node table. Không dùng RSSI/SNR của packet lỗi để cập
+nhật online state; ACK chỉ dùng để hoàn tất transaction đang chờ.
 
 ### G3 — TX scheduler
 Ưu tiên:
@@ -129,7 +148,13 @@ CRC sai thì bỏ packet, không tạo ACK.
 3. các phản hồi/traffic điều khiển cần thiết
 4. telemetry định kỳ nếu có
 
-Không gửi STATUS/HEARTBEAT của tất cả Node liên tục nếu không cần thiết.
+Không forward STATUS/HEARTBEAT của tất cả Node lên Wi-Fi/server liên tục;
+LoRa RX vẫn phải tiếp nhận chúng. Uplink có rate limit/coalescing riêng.
+Mỗi NODE_ID có tối đa một pending COMMAND. Lệnh mới cùng Node thay thế lệnh
+cũ chưa TX; lệnh đã TX và đang chờ ACK được retry trước khi lệnh mới được
+đưa vào. Các Node khác được phục vụ round-robin.
+Queue Gateway BEACON có một mục lịch cho mỗi Node và không dùng chung queue
+COMMAND retry.
 
 ### G4 — Node table
 Gateway lưu tối thiểu:
@@ -151,6 +176,8 @@ Gateway lưu tối thiểu:
 - Kiểm tra cả NODE_ID nguồn, ACK_SEQ và RESULT; ACK lỗi kết thúc transaction
   với trạng thái lỗi, không báo thành công.
 - Duplicate COMMAND ở Node không được thực thi lần hai.
+- `REQUEST_STATUS` được xử lý ngay: Node đọc snapshot gần nhất, gửi STATUS
+  trong cửa sổ TX kế tiếp và vẫn trả ACK SUCCESS cho COMMAND.
 
 ## Gateway main flow
 
@@ -223,10 +250,15 @@ V1 có thể dùng:
 Mục tiêu là giảm collision và giảm tổng Time-on-Air của mạng.
 
 ## Receive algorithm
-RX packet → check length → CRC → NODE_ID → SEQ → validate TYPE/DATA → update state → response/ACK nếu cần.
+RX packet → require 6 bytes → read LEN → exact total length → known TYPE and
+fixed LEN → NODE_ID 0x01..0xFE → CRC → dispatch. Chỉ STATUS/HEARTBEAT hợp lệ
+cập nhật Node table; BEACON hợp lệ và đúng đích refreshes Gateway liveness;
+ACK chỉ đóng pending transaction. Packet lỗi không được cập nhật Last Seen,
+RSSI/SNR hay relay state.
 
 CRC sai: discard, không ACK.
-SEQ trùng: không execute lại, resend ACK nếu command yêu cầu.
+SEQ trùng: so sánh cả payload với command gần nhất; chỉ trùng cả hai mới
+resend ACK, còn trùng SEQ khác payload thì báo protocol error và bỏ packet.
 
 ## Reliability
 Command quan trọng cần ACK. Timeout chọn sau khi đo Time-on-Air thực tế. Retry tối đa 3 lần là giá trị khởi đầu. STATUS/HEARTBEAT định kỳ không nhất thiết ACK từng packet.
@@ -263,7 +295,9 @@ Không tách một STATUS thành nhiều packet chỉ để giảm vài byte. V�
 - ACK timeout dựa trên ToA đo thực tế
 - Channel/tần số riêng cho LoRa 1 và LoRa 2 nếu cần
 - Cơ chế chống collision cuối cùng cho nhiều Node
-- Packet/schedule tín hiệu Gateway định kỳ và timeout fallback tương ứng
+- Đo và xác nhận lịch BEACON 30s / fallback 90s
 - Cách khởi tạo/đồng bộ DS3231, giá trị timestamp khi RTC lỗi
 - Quy tắc làm tròn/giới hạn LUX và biểu diễn khi BH1750 lỗi
 - Xác thực COMMAND trước khi triển khai trên kênh radio không tin cậy
+- Cách nạp NODE_ID cố định `0x01..0xFE`, kiểm tra trùng ID khi commissioning
+- Quy tắc relay feedback: commanded state hay contact feedback khi báo STATUS

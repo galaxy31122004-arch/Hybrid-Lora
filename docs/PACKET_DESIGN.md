@@ -28,7 +28,7 @@ TYPE | NODE_ID | SEQ | LEN | PAYLOAD | CRC16
 | Field | Size | Description |
 |---|---:|---|
 | TYPE | 1 B | Packet/message type |
-| NODE_ID | 1 B | Destination Node for COMMAND; source Node for ACK, STATUS, HEARTBEAT |
+| NODE_ID | 1 B | Destination Node for COMMAND/BEACON; source Node for ACK, STATUS, HEARTBEAT |
 | SEQ | 1 B | Sequence number |
 | LEN | 1 B | Payload length in bytes |
 | PAYLOAD | N B | Type-specific binary data |
@@ -50,7 +50,7 @@ before using `0xFF`.
 
 The receiver checks the physical frame length before reading fields. A V1
 frame has at least 6 bytes and must have exactly `6 + LEN` bytes. Known types
-have fixed payload lengths: COMMAND=2, ACK=2, STATUS=8, HEARTBEAT=1. The
+have fixed payload lengths: COMMAND=2, ACK=2, STATUS=8, HEARTBEAT=1, BEACON=0. The
 largest valid V1 payload is therefore 8 bytes. Reject unknown TYPE, invalid
 NODE_ID, a LEN that differs from the type's fixed length, or an invalid CRC
 before dispatching the packet. These are V1 protocol limits, not a claim about
@@ -87,8 +87,15 @@ V1 uses:
 | 0x02 | ACK | Node -> Gateway | Confirm COMMAND processing | No |
 | 0x03 | STATUS | Node -> Gateway | Report Node state + sensor data | No |
 | 0x04 | HEARTBEAT | Node -> Gateway | Report Node alive/health | No |
+| 0x05 | BEACON | Gateway -> Node | Prove Gateway liveness | No |
 
 No CONFIG or ERROR packet is included in V1.
+
+BEACON has an empty payload and is sent individually to each Node. The V1
+starting schedule is one BEACON every 30 seconds per Node. A Node enters
+REMOTE fallback after 90 seconds without a valid addressed BEACON (three
+periods); these are starting values to validate against measured airtime and
+collision behavior. BEACON is not acknowledged.
 
 ## SEQ
 
@@ -217,8 +224,11 @@ MODE:
 0x01 = REMOTE
 ```
 
-LUX is illuminance in whole lux. The rounding/saturation rule and the value
-used when BH1750 data is unavailable must be fixed before implementing STATUS.
+LUX is illuminance in whole lux. Values above `0xFFFE` saturate at `0xFFFE`;
+`0xFFFF` means BH1750 data is unavailable. A missing/invalid RTC is encoded as
+TIMESTAMP=0 and bit 1 of HEARTBEAT (`DS3231 OK`) is cleared. `LIGHT_STATE`
+reports the commanded output state in V1; contact feedback is not present in
+the current schematic and must not be inferred from this field.
 
 NODE_ID is already present in the common header and is **not duplicated inside STATUS**.
 
@@ -264,6 +274,19 @@ TYPE NODE_ID SEQ LEN STATUS_FLAGS CRC16
 
 Total: **7 bytes**.
 
+## BEACON
+
+BEACON has payload size **0 bytes**. Its `NODE_ID` is the destination Node and
+its `SEQ` is a Gateway-origin sequence counter. A Node refreshes its Gateway
+liveness deadline only after validating the complete frame and matching its
+own `NODE_ID`.
+
+```text
+TYPE NODE_ID SEQ LEN CRC16
+```
+
+Total: **6 bytes**.
+
 ## Reliability rules
 
 1. COMMAND uses ACK.
@@ -272,16 +295,18 @@ Total: **7 bytes**.
 4. Retry timing must be validated using actual LoRa Time-on-Air.
 5. If CRC fails, discard the packet and do not ACK.
 6. For a retry of the most recently processed COMMAND with the same SEQ and payload, do not execute it again; resend the previous ACK. A repeated SEQ with different payload is a protocol error, not a retry.
-7. STATUS and HEARTBEAT do not require ACK in V1.
+7. STATUS, HEARTBEAT, and BEACON do not require ACK in V1.
 8. STATUS is best-effort; a later STATUS refreshes Gateway state.
 
 ## Hybrid communication consideration
 
-V1 HEARTBEAT is defined as Node -> Gateway.
+V1 HEARTBEAT is defined as Node -> Gateway. V1 BEACON is defined as Gateway
+-> Node and is the liveness signal used by a Node in REMOTE mode.
 
-For Node-side REMOTE -> FALLBACK detection, the Node must also observe valid Gateway traffic. The implementation should use a Gateway heartbeat/beacon or valid Gateway packet activity as the liveness signal rather than relying only on Node -> Gateway HEARTBEAT.
-
-The exact fallback timeout will be selected after measuring the actual LoRa communication interval and network behavior.
+For Node-side REMOTE -> FALLBACK detection, the Node observes addressed
+BEACON frames. COMMAND traffic may refresh the same deadline when valid, but
+does not replace the periodic BEACON schedule. The starting 30/90 second
+periods above remain subject to hardware validation.
 
 Valid Gateway COMMAND traffic alone is insufficient as a liveness signal when
 remote control can be idle for longer than the fallback timeout. A periodic
@@ -305,6 +330,7 @@ the current V1 frame describes prototype communication only.
 | ACK | 2 B | **8 B** |
 | STATUS | 8 B | **14 B** |
 | HEARTBEAT | 1 B | **7 B** |
+| BEACON | 0 B | **6 B** |
 
 This keeps frequent control/health packets short while keeping all STATUS information in one transmission.
 
@@ -332,4 +358,5 @@ Implement:
 3. CRC-16-CCITT;
 4. COMMAND/ACK reliability;
 5. STATUS/HEARTBEAT handling;
-6. LoRa Time-on-Air calculation for SF7-SF12.
+6. BEACON scheduling and fallback handling;
+7. LoRa Time-on-Air calculation for SF7-SF12.
