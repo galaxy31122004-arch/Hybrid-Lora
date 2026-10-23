@@ -16,3 +16,8 @@ add_test(NAME packet_tests COMMAND packet_tests)
 add_executable(packet_semantics_tests tests/packet/test_semantics.cpp)
 target_link_libraries(packet_semantics_tests PRIVATE hybrid_lora_packet)
 add_test(NAME packet_semantics_tests COMMAND packet_semantics_tests)
+
+add_executable(gateway_state_tests tests/packet/test_gateway_state.cpp lib/gateway_state/gateway_state.cpp)
+target_include_directories(gateway_state_tests PRIVATE lib/gateway_state)
+target_link_libraries(gateway_state_tests PRIVATE hybrid_lora_packet)
+add_test(NAME gateway_state_tests COMMAND gateway_state_tests)
