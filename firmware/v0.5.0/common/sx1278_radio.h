@@ -107,6 +107,22 @@ class Sx1278Radio {
 
   // Signal of the last packet accepted by receive().
   int16_t last_rssi_dbm() const { return last_rssi_dbm_; }
+
+  // Change output power for the next transmissions (not while transmitting).
+  bool set_power_dbm(int8_t dbm) {
+    if (transmitting_) return false;
+    set_tx_power(dbm);
+    return true;
+  }
+
+  // Current channel RSSI (noise floor when nobody transmits). Only valid in
+  // RX with no packet being received; returns kNoReading otherwise.
+  static constexpr int16_t kNoReading = -32768;
+  int16_t channel_rssi_dbm() {
+    if (transmitting_) return kNoReading;
+    if (read_reg(0x18) & 0x0B) return kNoReading;  // ModemStat: signal/sync/header
+    return -164 + read_reg(0x1B);                    // RegRssiValue, LF port
+  }
   float last_snr_db() const { return last_snr_db_; }
 
  private:

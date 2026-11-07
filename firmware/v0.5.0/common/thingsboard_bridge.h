@@ -14,13 +14,16 @@ class ThingsBoardBridge {
   void begin();
   void post_node(uint8_t node_id, const hybrid_lora::GatewayState::Node& node);
   void post_result(const hybrid_lora::GatewayState::CommandResult& result);
+  // Uplink-channel noise floor, published as the gateway's own telemetry.
+  void post_noise(int16_t dbm);
   bool take_command(uint8_t& node_id, uint8_t& command, uint8_t& param,
                     uint32_t& rpc_id);
 
  private:
   struct CloudEvent {
-    enum class Type : uint8_t { Node, Result } type;
+    enum class Type : uint8_t { Node, Result, Noise } type;
     uint8_t node_id;
+    int16_t noise_dbm;
     hybrid_lora::GatewayState::Node node;
     hybrid_lora::GatewayState::CommandResult result;
   };
@@ -54,4 +57,5 @@ class ThingsBoardBridge {
   std::optional<hybrid_lora::GatewayState::CommandResult>
       pending_results_[hybrid_lora::GatewayState::kMaxNodes + 1]{};
   uint8_t next_node_{1};
+  std::optional<int16_t> pending_noise_;
 };

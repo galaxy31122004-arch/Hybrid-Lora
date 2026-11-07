@@ -8,6 +8,7 @@ namespace {
 constexpr char kConnectTopic[] = "v1/gateway/connect";
 constexpr char kTelemetryTopic[] = "v1/gateway/telemetry";
 constexpr char kRpcTopic[] = "v1/gateway/rpc";
+constexpr char kGatewayTelemetryTopic[] = "v1/devices/me/telemetry";  // the gateway itself
 constexpr uint32_t kReconnectMs = 10000;
 // Nodes report every 900 s +/- 90 s; offline after three missed reports.
 constexpr uint32_t kNodeOnlineMs = 3 * 990000;
@@ -43,6 +44,14 @@ void ThingsBoardBridge::post_result(
   CloudEvent event{};
   event.type = CloudEvent::Type::Result;
   event.result = result;
+  xQueueSend(events_, &event, 0);
+}
+
+void ThingsBoardBridge::post_noise(int16_t dbm) {
+  if (!events_) return;
+  CloudEvent event{};
+  event.type = CloudEvent::Type::Noise;
+  event.noise_dbm = dbm;
   xQueueSend(events_, &event, 0);
 }
 
@@ -125,6 +134,11 @@ void ThingsBoardBridge::task_loop() {
             node.dirty = true;
           }
         }
+        if (pending_noise_.has_value()) {
+          char json[48];
+          snprintf(json, sizeof(json), "{\"noiseFloor\":%d}", *pending_noise_);
+          if (mqtt_.publish(kGatewayTelemetryTopic, json)) pending_noise_.reset();
+        }
         publish_one_node();
       }
     }
@@ -133,6 +147,10 @@ void ThingsBoardBridge::task_loop() {
 }
 
 void ThingsBoardBridge::handle_event(const CloudEvent& event) {
+  if (event.type == CloudEvent::Type::Noise) {
+    pending_noise_ = event.noise_dbm;  // keep only the latest reading
+    return;
+  }
   if (event.type == CloudEvent::Type::Result) {
     if (event.result.node_id > 0 &&
         event.result.node_id <= hybrid_lora::GatewayState::kMaxNodes) {

@@ -25,11 +25,20 @@ constexpr uint8_t kMaxNodes = 50;
 constexpr uint32_t kStatusPeriodMs = 900000;
 constexpr uint32_t kStatusJitterMs = 90000;
 constexpr uint32_t kChangeReportMaxDelayMs = 10000;  // random 0..10 s
-// Test mode (RPC setTestMode): STATUS every 90 s +/- 10 s for field tests.
-// 0.83 s per 90 s stays under the 1% duty cycle allowed at +20 dBm. Use it on
-// a few nodes at a time; it switches itself off after the requested minutes.
-constexpr uint32_t kTestStatusPeriodMs = 90000;
-constexpr uint32_t kTestStatusJitterMs = 10000;
+// Test mode (RPC setTestMode): denser samples for field tests. The node
+// drops to 17 dBm, where the SX1278's 1% limit for +20 dBm no longer applies,
+// and sends STATUS every 15 s +/- 3 s (0.83 s / 15 s = 5.5% air time, under
+// the usual 10% for the band). The gateway adds kTestPowerOffsetDb back to
+// the RSSI/SNR it reports, so test readings match normal 20 dB operation.
+// Use it on a few nodes at a time; it switches itself off after the
+// requested minutes.
+constexpr uint32_t kTestStatusPeriodMs = 15000;
+constexpr uint32_t kTestStatusJitterMs = 3000;
+constexpr int8_t kTestTxPowerDbm = 17;
+constexpr int8_t kTestPowerOffsetDb = lora_phy::kTxPowerDbm - kTestTxPowerDbm;
+// Gateway: sample the uplink channel's noise floor while idle.
+constexpr uint32_t kNoiseSampleMs = 2000;   // one reading every 2 s
+constexpr uint8_t kNoiseSamplesPerReport = 5;  // report the mean every ~10 s
 constexpr uint32_t kBeaconPeriodMs = 120000;
 constexpr uint32_t kGatewayTimeoutMs = 3 * kBeaconPeriodMs;
 // Separate channels inside the 433.05-434.79 MHz ISM band so the gateway's
@@ -50,6 +59,9 @@ bool gateway_role = false;
 bool remote_mode = false;
 bool beacon_sent = false;
 uint32_t next_status_ms = 0;
+uint32_t last_noise_sample = 0;
+int32_t noise_sum = 0;
+uint8_t noise_count = 0;
 uint32_t last_beacon = 0;
 uint32_t last_gateway_beacon = 0;
 uint8_t beacon_seq = 0;
@@ -104,6 +116,9 @@ void handle_node_command(const hybrid_lora::packet::Frame& frame) {
   } else if (command.command == pk::kCmdTestMode && command.param <= pk::kMaxTestMinutes) {
     test_mode = command.param > 0;
     test_mode_until_ms = millis() + command.param * 60000UL;
+    // Switch power before the ACK so every frame carrying the new test flag
+    // is sent at the matching power (the gateway compensates on that flag).
+    radio1.set_power_dbm(test_mode ? kTestTxPowerDbm : lora_phy::kTxPowerDbm);
     next_status_ms = millis() + (test_mode ? 2000 : next_status_delay());
   } else {
     result = 0x01;
@@ -138,8 +153,12 @@ void process_gateway_radio() {
   const auto decoded = hybrid_lora::packet::decode(buffer, length);
   if (!decoded.ok || decoded.frame.node_id == 0 || decoded.frame.node_id > kMaxNodes) return;
   gateway.on_frame(decoded.frame, millis());
-  gateway.set_signal(decoded.frame.node_id, radio1.last_rssi_dbm(),
-                     radio1.last_snr_db());
+  // A node in test mode transmits kTestPowerOffsetDb lower; report what it
+  // would measure at normal power. (SNR is only shifted while above the noise.)
+  const bool test = gateway.node(decoded.frame.node_id).status.test_mode;
+  const int16_t rssi = radio1.last_rssi_dbm() + (test ? kTestPowerOffsetDb : 0);
+  const float snr = radio1.last_snr_db() + (test ? kTestPowerOffsetDb : 0);
+  gateway.set_signal(decoded.frame.node_id, rssi, snr);
   print_signal(decoded.frame.type == hybrid_lora::packet::Type::Status ? "STATUS" : "ACK",
                decoded.frame.node_id);
   if (decoded.frame.type == hybrid_lora::packet::Type::Status ||
@@ -151,7 +170,8 @@ void process_gateway_radio() {
 void run_node(uint32_t now) {
   process_node_radio();
   // Retry on the next loop if the radio is still busy; never drop a report.
-  if (test_mode && static_cast<int32_t>(now - test_mode_until_ms) >= 0) {
+  if (test_mode && static_cast<int32_t>(now - test_mode_until_ms) >= 0 &&
+      radio1.set_power_dbm(lora_phy::kTxPowerDbm)) {  // waits for any TX to end
     test_mode = false;  // reported below as an unsolicited change
     Serial.println("Test mode ended");
   }
@@ -168,8 +188,24 @@ void run_node(uint32_t now) {
   }
 }
 
+// Noise floor of the uplink channel: sample while idle, report the mean.
+void sample_noise(uint32_t now) {
+  if (now - last_noise_sample < kNoiseSampleMs) return;
+  last_noise_sample = now;
+  const int16_t rssi = radio1.channel_rssi_dbm();
+  if (rssi == Sx1278Radio::kNoReading) return;  // a packet is arriving
+  noise_sum += rssi;
+  if (++noise_count < kNoiseSamplesPerReport) return;
+  const int16_t mean = static_cast<int16_t>(noise_sum / noise_count);
+  noise_sum = 0;
+  noise_count = 0;
+  Serial.printf("NOISE uplink=%d dBm\n", mean);
+  cloud.post_noise(mean);
+}
+
 void run_gateway(uint32_t now) {
   process_gateway_radio();
+  sample_noise(now);
   radio2.packet_available();  // Complete TX and return the second radio to RX.
   uint8_t node_id = 0;
   uint8_t command = 0;

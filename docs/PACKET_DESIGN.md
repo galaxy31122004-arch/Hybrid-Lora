@@ -439,8 +439,8 @@ ThingsBoard (`rssi`, `snr`) for field measurement.
 
 | COMMAND | Param | Effect |
 |---|---|---|
-| `0x05` TEST_MODE | minutes `0..120` (`0` = off) | STATUS every 90 s ± 10 s until the time runs out, then back to 900 s |
+| `0x05` TEST_MODE | minutes `0..120` (`0` = off) | output 17 dBm, STATUS every 15 s ± 3 s until the time runs out, then back to 20 dBm and 900 s |
 
 STATUS flags: bit0 light, bit1 remote mode, bits2–6 health (5 bits), **bit7
-test mode**. 90 s keeps a node under the SX1278's 1% duty cycle at +20 dBm
-(0.83 s / 90 s ≈ 0.9%).
+test mode**. At 17 dBm the SX1278 1% limit for +20 dBm does not apply; 15 s gives
+0.83 s / 15 s ≈ 5.5% air time per test node (under the usual 10%). The gateway adds the 3 dB power difference back to the RSSI/SNR it reports, so test samples compare with normal operation. The gateway also publishes the uplink noise floor (`noiseFloor`, mean of 5 idle readings, ~every 10 s) as its own telemetry.

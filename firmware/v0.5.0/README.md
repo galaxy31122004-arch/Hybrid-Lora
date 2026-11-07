@@ -82,13 +82,13 @@ The gateway also sends `rssi` and `snr` for each node to ThingsBoard (tab
 **Test nhanh** of the dashboard). For a field test, either carry a powered
 node away from the gateway and watch the BEACON lines on its Serial (one
 every 120 s), or press **Test 30 phút** for that node and watch its RSSI/SNR
-update on the dashboard every ~90 s. At SF12 the link fails near SNR −20 dB; the margin
+update on the dashboard every ~15 s (test mode sends at 17 dBm; the gateway adds the 3 dB back). At SF12 the link fails near SNR −20 dB; the margin
 left is roughly `SNR + 20` dB. With 10 dB or more to spare at the farthest
 node, a lower SF (faster, fewer collisions) is likely to work.
 
 ## ThingsBoard Cloud setup
 
-1. In ThingsBoard Cloud, create a device for the gateway, enable **Is gateway**,
+1. In ThingsBoard Cloud, create a device named **`Hybrid-LoRa-Gateway`** (the dashboard looks for this name), enable **Is gateway**,
    and copy its access token. Use the Cloud region associated with your account.
 2. Copy `firmware/v0.5.0/common/cloud_config_local.example.h` to
    `firmware/v0.5.0/common/cloud_config_local.h`. Enter the Wi-Fi SSID and password,
@@ -118,15 +118,15 @@ choose the file. It lists every device whose name starts with `Node-`.
 | Tab | Shows | Buttons per node |
 |---|---|---|
 | **Vận hành** (opens first) | Online, đèn, chế độ, lux, health | Bật đèn, Tắt đèn |
-| **Test nhanh** | Online, RSSI, SNR, test mode, đèn + RSSI/SNR chart (1 h) | Ping, Test 30 phút, Tắt test, Bật/Tắt đèn |
+| **Test nhanh** | Online, RSSI, SNR, test mode, đèn + smoothed RSSI/SNR charts (1 h) + gateway noise floor (~10 s) | Ping, Test 30 phút, Tắt test, Bật/Tắt đèn |
 
 Switch tabs with the button in each table's header. Each button sends a
 server-side RPC to that node and shows a toast with the result; at SF12 a
 command and its ACK take about 2 s, up to ~16 s with retries.
 
-The JSON follows the ThingsBoard 3.6+/Cloud export format but has not been
-imported into a live ThingsBoard yet. If a widget fails to load, rebuild it by
-hand: an **Entities table** on the alias "Tất cả Node" (entity name starts with
+Imported and opened on ThingsBoard Cloud 4.4.0 (both tabs, tab switching and
+the chart load). The per-node buttons could not be tried yet because no
+`Node-xx` device existed. If a widget fails to load, rebuild it by hand: an **Entities table** on the alias "Tất cả Node" (entity name starts with
 `Node-`) with the keys above, and **Action cell buttons** of type *Custom
 action* that call
 `widgetContext.deviceService.sendTwoWayRpcCommand(entityId.id, {method, params, timeout: 60000})`.
@@ -137,12 +137,12 @@ action* that call
 |---|---|---|
 | `setLight` | `true` / `false` or `{"on": true}` | relay on/off |
 | `ping` | none | node ACKs, then sends a STATUS (fresh `rssi`/`snr`) |
-| `setTestMode` | minutes `0..120` (`0` = off), `true` (= 30) / `false`, or `{"minutes": n}` | test mode: STATUS every 90 s, ends by itself |
+| `setTestMode` | minutes `0..120` (`0` = off), `true` (= 30) / `false`, or `{"minutes": n}` | test mode: 17 dBm, STATUS every 15 s, ends by itself |
 
 The reply contains `success`; a failure contains `error` (`busy`, `timeout`,
 `node_rejected`, `invalid_params`, `invalid_request`). The gateway waits for
 the node's LoRa ACK before replying. Keep test mode to a few nodes at a time:
-each test node uses ~0.9% air time, and the channel is shared.
+each test node uses ~5.5% air time (0.83 s every 15 s) and the channel is shared.
 
 The gateway keeps LoRa processing in the main loop while Wi-Fi/MQTT reconnects
 in a separate task. Without a local configuration file, Cloud is disabled and
