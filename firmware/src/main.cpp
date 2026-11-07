@@ -134,6 +134,7 @@ void run_gateway(uint32_t now) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("Hybrid-LoRa firmware v" FW_VERSION);
   pinMode(hybrid_lora::pins::MODE, INPUT_PULLUP);
   digitalWrite(hybrid_lora::pins::RELAY1, LOW);
   digitalWrite(hybrid_lora::pins::RELAY2, LOW);
