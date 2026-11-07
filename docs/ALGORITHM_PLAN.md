@@ -290,15 +290,26 @@ chọn SF/BW/CR phù hợp
 
 Không tách một STATUS thành nhiều packet chỉ để giảm vài byte. Với mạng nhiều Node, tổng airtime và số lần chiếm kênh quan trọng hơn việc tối thiểu hóa từng packet riêng lẻ.
 
+### Cấu hình đã chọn từ firmware v0.4.0
+
+Ưu tiên tầm xa nhất: SF12 / 125 kHz / CR 4/5, LDRO bật, 20 dBm PA_BOOST,
+uplink 433.175 MHz, downlink 433.575 MHz. Gói tin format v2 (xem
+`PACKET_DESIGN.md` § Format v2): bỏ HEARTBEAT, BEACON phát chung một gói cho
+mọi Node, bỏ LEN và CRC-16 (dùng CRC phần cứng).
+
+Lịch phát theo airtime SF12 và giới hạn duty cycle 1% của SX1278 ở +20 dBm:
+STATUS 600 s ± 60 s (ngẫu nhiên), BEACON chung 120 s, Node fallback sau
+360 s, COMMAND retry 4 s × 4 lần. Đánh đổi: độ trễ báo trạng thái lên tới
+10 phút, phát hiện Node mất kết nối chậm (33 phút trên Cloud); lệnh điều
+khiển mất khoảng 2 s mỗi lượt.
+
 ## Chưa chốt
 - Sensor list cuối cùng
 - POWER_STATUS: có điện áp hay đèn thực sự có dòng
-- Chu kỳ STATUS/HEARTBEAT
-- SF/BW/CR
+- Đo tầm phát thực tế và packet loss ở SF12; giảm SF nếu không cần tầm xa tối đa
+- Mức công suất hợp lệ cho băng 433 MHz tại nơi triển khai (v0.4.0 phát 20 dBm)
 - ACK timeout dựa trên ToA đo thực tế
-- Channel/tần số riêng cho LoRa 1 và LoRa 2 nếu cần
-- Cơ chế chống collision cuối cùng cho nhiều Node
-- Đo và xác nhận lịch BEACON 30s / fallback 90s
+- Cơ chế chống collision cuối cùng cho nhiều Node (hiện: jitter ngẫu nhiên)
 - Cách khởi tạo/đồng bộ DS3231, giá trị timestamp khi RTC lỗi
 - Quy tắc làm tròn/giới hạn LUX và biểu diễn khi BH1750 lỗi
 - Xác thực COMMAND trước khi triển khai trên kênh radio không tin cậy
