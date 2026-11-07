@@ -1,5 +1,9 @@
 #include <Arduino.h>
 #include <SPI.h>
+// Not used here directly: lets PlatformIO's default LDF find the libraries
+// that thingsboard_bridge.cpp needs.
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
 
 #include "packet.h"
 #include "gateway_state.h"
@@ -130,6 +134,7 @@ void run_gateway(uint32_t now) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("Hybrid-LoRa firmware v" FW_VERSION);
   pinMode(hybrid_lora::pins::MODE, INPUT_PULLUP);
   digitalWrite(hybrid_lora::pins::RELAY1, LOW);
   digitalWrite(hybrid_lora::pins::RELAY2, LOW);

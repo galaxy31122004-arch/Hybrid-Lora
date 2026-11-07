@@ -109,6 +109,21 @@ void ThingsBoardBridge::task_loop() {
       }
       if (mqtt_.connected()) {
         mqtt_.loop();
+        for (uint8_t id = 1; id <= hybrid_lora::GatewayState::kMaxNodes; ++id) {
+          auto& result = pending_results_[id];
+          if (result.has_value() &&
+              reply(id, result->rpc_id, result->success,
+                    result->result_code == 0xFF ? "timeout" :
+                    result->result_code == 0xFE ? "busy" : "node_rejected")) {
+            result.reset();
+          }
+          CachedNode& node = nodes_[id];
+          if (node.seen && !node.dirty &&
+              (now - node.node.last_seen_ms < kNodeOnlineMs) !=
+                  node.published_online) {
+            node.dirty = true;
+          }
+        }
         publish_one_node();
       }
     }
@@ -118,8 +133,10 @@ void ThingsBoardBridge::task_loop() {
 
 void ThingsBoardBridge::handle_event(const CloudEvent& event) {
   if (event.type == CloudEvent::Type::Result) {
-    reply(event.result.node_id, event.result.rpc_id, event.result.success,
-          event.result.result_code == 0xFF ? "timeout" : "node_rejected");
+    if (event.result.node_id > 0 &&
+        event.result.node_id <= hybrid_lora::GatewayState::kMaxNodes) {
+      pending_results_[event.result.node_id] = event.result;
+    }
     return;
   }
   if (event.node_id == 0 ||
@@ -156,7 +173,8 @@ void ThingsBoardBridge::publish_one_node() {
     StaticJsonDocument<320> telemetry;
     JsonArray values = telemetry.createNestedArray(name);
     JsonObject snapshot = values.createNestedObject();
-    snapshot["online"] = millis() - cached.node.last_seen_ms < kNodeOnlineMs;
+    const bool online = millis() - cached.node.last_seen_ms < kNodeOnlineMs;
+    snapshot["online"] = online;
     snapshot["healthFlags"] = cached.node.health_flags;
     if (cached.node.has_status) {
       snapshot["lux"] = cached.node.status.lux;
@@ -165,7 +183,10 @@ void ThingsBoardBridge::publish_one_node() {
     }
     char json[320];
     serializeJson(telemetry, json, sizeof(json));
-    if (mqtt_.publish(kTelemetryTopic, json)) cached.dirty = false;
+    if (mqtt_.publish(kTelemetryTopic, json)) {
+      cached.dirty = false;
+      cached.published_online = online;
+    }
     return;
   }
 }
@@ -190,21 +211,23 @@ void ThingsBoardBridge::on_message(char* topic, uint8_t* payload,
   }
 
   JsonVariant params = request["data"]["params"];
-  JsonVariant on = params.is<JsonObject>() ? params["on"] : params;
-  if (!on.is<bool>()) {
+  const bool is_object = params.is<JsonObject>();
+  if ((!is_object && !params.is<bool>()) ||
+      (is_object && !params["on"].is<bool>())) {
     reply(id, rpc_id, false, "invalid_params");
     return;
   }
+  const bool turn_on = is_object ? params["on"].as<bool>() : params.as<bool>();
   CloudCommand command{static_cast<uint8_t>(id),
-                       static_cast<uint8_t>(on.as<bool>() ? 1 : 2), 0, rpc_id};
+                       static_cast<uint8_t>(turn_on ? 1 : 2), 0, rpc_id};
   if (xQueueSend(commands_, &command, 0) != pdTRUE) {
     reply(id, rpc_id, false, "busy");
   }
 }
 
-void ThingsBoardBridge::reply(uint8_t node_id, uint32_t rpc_id, bool success,
+bool ThingsBoardBridge::reply(uint8_t node_id, uint32_t rpc_id, bool success,
                                const char* error) {
-  if (!mqtt_.connected()) return;
+  if (!mqtt_.connected()) return false;
   StaticJsonDocument<192> response;
   char name[16];
   device_name(node_id, name, sizeof(name));
@@ -215,5 +238,5 @@ void ThingsBoardBridge::reply(uint8_t node_id, uint32_t rpc_id, bool success,
   if (!success) data["error"] = error;
   char json[192];
   serializeJson(response, json, sizeof(json));
-  mqtt_.publish(kRpcTopic, json);
+  return mqtt_.publish(kRpcTopic, json);
 }
