@@ -1,61 +1,43 @@
-# Firmware layout
+# Firmware
 
-The board uses one firmware image. `firmware/src/main.cpp` reads the `MODE`
-jumper during boot:
+Each firmware version has its own folder with a full copy of its source:
 
-- `MODE = LOW`: Gateway, initializes both SX1278 radios.
-- `MODE = HIGH`: Node, initializes radio 1 and the relay control loop.
+| Folder | Version | Contents | Build env |
+|---|---|---|---|
+| `v0.2.0/` | **0.2.0 (current)** | LoRa gateway/node + ThingsBoard Cloud bridge | `esp32dev` |
+| `v0.1.0/` | 0.1.0 | LoRa gateway/node scaffold | — (archive only: does not compile) |
 
-Pin assignments are centralized in `firmware/common/pins.h` and follow the
-schematic net labels. GPIO12 is currently assigned to the second LoRa DIO0
-net; verify that the module does not hold this ESP32 strapping pin high during
-reset before production use.
+Only the current folder is edited. Older folders are frozen copies of each
+release; Git tags `v0.1.0`, `v0.2.0` mark the same states. From v0.2.0 on,
+each folder keeps a build env so the version can be rebuilt exactly.
 
-The gateway maintains up to 50 node states and relays telemetry and commands
-through ThingsBoard Cloud. Sensor drivers and RTC integration remain future
-work. The current Node ID is fixed to 1 in `firmware/src/main.cpp`; assign
-distinct IDs before deploying more nodes.
+## Build
 
-## Firmware versions
+From the repository root:
 
-The version is set in one place: `custom_fw_version` in `platformio.ini`.
-`scripts/fw_version.py` passes it to the code as `FW_VERSION` (printed on
-Serial at boot) and, after each build, copies the image to
+```text
+pio run -e esp32dev                 # current version (v0.2.0)
+pio run -e esp32dev-v0_2_0          # an older version, once v0.3.0 exists
+pio run -e esp32dev -t upload --upload-port COM3
+```
+
+Each build prints the version at boot (`FW_VERSION`) and copies the image to
 `releases/v<version>/hybrid-lora-<env>-v<version>.bin` (plus `.elf`). The
-`releases/` folder is not tracked by Git.
+`releases/` folder is not tracked by Git; published binaries are attached to
+the GitHub Release with the same tag.
 
-To release a new version: raise `custom_fw_version` (patch for fixes, minor for
-features), build, merge to `main`, tag the merge `v<version>`, and attach the
-`.bin` to a GitHub Release with the same tag.
+## Starting a new version
 
-## ThingsBoard Cloud setup
+1. Copy the current folder, e.g. `firmware/v0.2.0` to `firmware/v0.3.0`.
+2. In `platformio.ini`, point `[env:esp32dev]` at the new folder and set
+   `custom_fw_version`; add an `[env:esp32dev-v0_2_0]` section for the old one
+   (copy the `esp32dev` section with the old folder and version; env names
+   cannot contain dots).
+3. Add a row to the table above. When merged to `main`, tag the merge
+   `v0.3.0` and attach the `.bin` to a GitHub Release.
 
-1. In ThingsBoard Cloud, create a device for the gateway, enable **Is gateway**,
-   and copy its access token. Use the Cloud region associated with your account.
-2. Copy `firmware/common/cloud_config_local.example.h` to
-   `firmware/common/cloud_config_local.h`. Enter the Wi-Fi SSID and password,
-   gateway access token, MQTT host, and the PEM root CA certificate from the
-   device's **Check connectivity** dialog. This local file is ignored by Git.
-   The North America MQTT host is `mqtt.thingsboard.cloud`; for another region,
-   use the host shown in your Cloud account. TLS uses port 8883.
-3. Set `MODE = LOW` on the gateway board and upload from the repository root:
+Version numbers: patch for fixes, minor for new features, major for
+incompatible changes (packet format, pinout).
 
-   ```text
-   pio run -e esp32dev -t upload --upload-port COM3
-   ```
-
-4. After a node sends a valid `STATUS` or `HEARTBEAT`, the gateway announces it
-   as `Node-01` through `Node-50`. In ThingsBoard, select that child device and
-   add its `online`, `healthFlags`, `lux`, `lightState`, and `mode` telemetry to a
-   dashboard. `lux = 65535` means the sensor value is unavailable in this
-   firmware. `online` becomes false 120 seconds after the last valid report.
-5. Configure a server-side RPC control widget for each child device. Method:
-   `setLight`; params: `true` for on or `false` for off. An object such as
-   `{"on":true}` is also accepted. The RPC response contains `success`; a
-   failure contains `error` (`busy`, `timeout`, or `node_rejected`). The gateway
-   waits for a matching LoRa ACK before reporting success.
-
-The gateway keeps LoRa processing in the main loop while Wi-Fi/MQTT reconnects
-in a separate task. Without a local configuration file, Cloud is disabled and
-the LoRa firmware continues to run. A functional Cloud test requires a gateway
-board, a reporting node, and valid ThingsBoard credentials.
+The local Cloud config `cloud_config_local.h` lives inside each version's
+`common/` folder and is ignored by Git.
