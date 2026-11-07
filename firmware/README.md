@@ -4,7 +4,8 @@ Each firmware version has its own folder with a full copy of its source:
 
 | Folder | Version | Contents | Build env |
 |---|---|---|---|
-| `v0.3.0/` | **0.3.0 (current)** | SX1278 fixes: RX continuous, PA_BOOST, explicit PHY settings, separate uplink/downlink channels | `esp32dev` |
+| `v0.4.0/` | **0.4.0 (current)** | Max range (SF12, 20 dBm) + packet format v2 (smaller packets, broadcast BEACON, no HEARTBEAT); own copy of packet/gateway state in `protocol/` | `esp32dev` |
+| `v0.3.0/` | 0.3.0 | SX1278 fixes: RX continuous, PA_BOOST, explicit PHY settings, separate uplink/downlink channels | `esp32dev-v0_3_0` |
 | `v0.2.0/` | 0.2.0 | LoRa gateway/node + ThingsBoard Cloud bridge | `esp32dev-v0_2_0` |
 | `v0.1.0/` | 0.1.0 | LoRa gateway/node scaffold | — (archive only: does not compile) |
 
@@ -17,7 +18,7 @@ each folder keeps a build env so the version can be rebuilt exactly.
 From the repository root:
 
 ```text
-pio run -e esp32dev                 # current version (v0.3.0)
+pio run -e esp32dev                 # current version (v0.4.0)
 pio run -e esp32dev-v0_2_0          # an older version
 pio run -e esp32dev -t upload --upload-port COM3
 ```

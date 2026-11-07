@@ -21,3 +21,9 @@ add_executable(gateway_state_tests tests/packet/test_gateway_state.cpp lib/gatew
 target_include_directories(gateway_state_tests PRIVATE lib/gateway_state)
 target_link_libraries(gateway_state_tests PRIVATE hybrid_lora_packet)
 add_test(NAME gateway_state_tests COMMAND gateway_state_tests)
+
+# Packet v2 used by firmware/v0.4.0 (own copy, does not touch lib/packet).
+add_executable(protocol_v040_tests tests/protocol_v040/test_protocol.cpp
+  firmware/v0.4.0/protocol/packet.cpp firmware/v0.4.0/protocol/gateway_state.cpp)
+target_include_directories(protocol_v040_tests PRIVATE firmware/v0.4.0/protocol)
+add_test(NAME protocol_v040_tests COMMAND protocol_v040_tests)

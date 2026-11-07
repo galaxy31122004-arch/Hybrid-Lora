@@ -1,5 +1,8 @@
 # Hybrid LoRa — Packet Design
 
+> Firmware v0.2.0–v0.3.0 use the V1 format below. Firmware v0.4.0 and later
+> use format v2: see [Format v2](#format-v2-firmware-v040) at the end.
+
 ## V1 scope
 
 Current firmware phase uses:
@@ -360,3 +363,49 @@ Implement:
 5. STATUS/HEARTBEAT handling;
 6. BEACON scheduling and fallback handling;
 7. LoRa Time-on-Air calculation for SF7-SF12.
+
+## Format v2 (firmware v0.4.0)
+
+Goal: maximum range (SF12, 125 kHz, CR 4/5, 20 dBm) with the fewest bytes on
+air. At SF12 every byte matters: one symbol lasts 32.8 ms.
+
+### Frame
+
+```text
+TYPE (1) | NODE_ID (1) | SEQ (1) | PAYLOAD (0..3)
+```
+
+Changes from V1:
+
+| V1 | v2 | Reason |
+|---|---|---|
+| LEN byte | removed | The LoRa explicit header already carries the length; each type has a fixed payload size. |
+| CRC-16 (2 B) | removed | SX1278 hardware CRC is enabled; the driver drops packets that fail it or were sent without it. |
+| HEARTBEAT (0x04) | removed | STATUS carries the health bits; an ACK also proves the node is alive. |
+| One BEACON per node (50 per cycle) | one broadcast BEACON, `NODE_ID = 0xFF` | 50× fewer beacon transmissions. |
+| STATUS timestamp (4 B) | removed | Always 0 until an RTC driver exists; add back when it is real. |
+| STATUS light_state + mode (2 B) | one flags byte | bit0 light, bit1 remote mode, bits2–7 health. |
+
+### Sizes and time on air (SF12/125 kHz/CR 4/5, preamble 8, explicit header, CRC on, LDRO on)
+
+| Packet | V1 | v2 | ToA v1 → v2 |
+|---|---:|---:|---|
+| STATUS | 14 B | 6 B | 1155 ms → 991 ms |
+| COMMAND | 8 B | 5 B | 991 ms → 827 ms |
+| ACK | 8 B | 5 B | 991 ms → 827 ms |
+| BEACON | 6 B × 50 nodes | 3 B × 1 | 50 × 827 ms → 827 ms |
+
+At SF12 the payload is coded in 20-bit blocks, so 3–5 B and 6–10 B each cost
+the same air time; further byte savings only help when they cross a block.
+
+### Schedule
+
+| Item | Value | Why |
+|---|---|---|
+| STATUS | every 600 s ± 60 s random, first within 30 s of boot | 50 nodes ≈ 8% uplink use; jitter avoids synchronized collisions |
+| BEACON | broadcast every 120 s | ≈ 0.7% gateway air time; SX1278 allows ≤ 1% duty cycle at +20 dBm |
+| Node fallback | 360 s (3 missed beacons) | |
+| Command retry | 4 s, 4 attempts | COMMAND + ACK ≈ 1.7 s at SF12 |
+| Cloud offline | 33 min (3 missed reports) | |
+
+Firmware v0.4.0 cannot interoperate with V1 devices.
