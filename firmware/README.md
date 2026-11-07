@@ -16,6 +16,18 @@ through ThingsBoard Cloud. Sensor drivers and RTC integration remain future
 work. The current Node ID is fixed to 1 in `firmware/src/main.cpp`; assign
 distinct IDs before deploying more nodes.
 
+## Firmware versions
+
+The version is set in one place: `custom_fw_version` in `platformio.ini`.
+`scripts/fw_version.py` passes it to the code as `FW_VERSION` (printed on
+Serial at boot) and, after each build, copies the image to
+`releases/v<version>/hybrid-lora-<env>-v<version>.bin` (plus `.elf`). The
+`releases/` folder is not tracked by Git.
+
+To release a new version: raise `custom_fw_version` (patch for fixes, minor for
+features), build, merge to `main`, tag the merge `v<version>`, and attach the
+`.bin` to a GitHub Release with the same tag.
+
 ## ThingsBoard Cloud setup
 
 1. In ThingsBoard Cloud, create a device for the gateway, enable **Is gateway**,
