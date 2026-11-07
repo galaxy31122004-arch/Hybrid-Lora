@@ -409,3 +409,28 @@ the same air time; further byte savings only help when they cross a block.
 | Cloud offline | 33 min (3 missed reports) | |
 
 Firmware v0.4.0 cannot interoperate with V1 devices.
+
+## Format v3 (firmware v0.5.0)
+
+Same as v2 except **STATUS has no SEQ** (nothing matches on it):
+
+```text
+STATUS:  TYPE (1) | NODE_ID (1) | LUX (2) | FLAGS (1)   = 5 bytes
+```
+
+At SF12 (LDRO on, CRC on, explicit header) the payload is coded in 40-bit
+blocks: 1–5 bytes cost one block (≈ 0.83 s), 6–10 bytes two (≈ 0.99 s). The
+6-byte v2 STATUS spent a whole block on one byte; v3 keeps every packet at
+5 bytes or less. Further byte savings below 5 do not shorten air time.
+
+Schedule changes:
+
+| Item | v2 | v3 |
+|---|---|---|
+| STATUS period | 600 s ± 60 s | 900 s ± 90 s |
+| STATUS on change | after `0x04` request only | also within 10 s of a change the gateway did not command (e.g. beacon-loss fallback) |
+| State after a command | needed a STATUS | taken from the successful ACK |
+| Uplink load, 50 nodes | ≈ 8% | ≈ 4.6% (≈ 91% pure-ALOHA success) |
+
+Every received packet's RSSI/SNR is printed on Serial and sent to
+ThingsBoard (`rssi`, `snr`) for field measurement.
