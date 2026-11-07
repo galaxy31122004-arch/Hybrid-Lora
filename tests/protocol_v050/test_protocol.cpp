@@ -16,7 +16,7 @@ static void test_sizes() {
 }
 
 static void test_status_layout_and_round_trip() {
-  const auto bytes = encode(make_status(12, 420, 1, 0, 0x2A));
+  const auto bytes = encode(make_status(12, 420, 1, 0, 0x0A));
   assert(bytes.size() == 5);
   assert(bytes[0] == 0x03 && bytes[1] == 12);
   assert(bytes[2] == (420 & 0xFF) && bytes[3] == (420 >> 8));
@@ -26,7 +26,7 @@ static void test_status_layout_and_round_trip() {
   StatusPayload status{};
   assert(read_status(decoded.frame, status));
   assert(status.lux == 420 && status.light_state == 1 && status.mode == 0);
-  assert(status.health == 0x2A);
+  assert(status.health == 0x0A && status.test_mode == 0);
 }
 
 static void test_command_keeps_seq() {
@@ -91,6 +91,27 @@ static void test_ack_updates_known_state() {
   assert(gateway.node(4).status.light_state == 1);  // unchanged on failure
 }
 
+static void test_test_mode_flag_and_command() {
+  const auto bytes = encode(make_status(5, 10, 0, 1, 0x1F, 1));
+  StatusPayload status{};
+  assert(read_status(decode(bytes.data(), bytes.size()).frame, status));
+  assert(status.test_mode == 1 && status.health == 0x1F && status.mode == 1);
+  // health is masked to 5 bits so it cannot set the test-mode bit
+  const auto masked = encode(make_status(5, 10, 0, 0, 0xFF, 0));
+  assert(read_status(decode(masked.data(), masked.size()).frame, status));
+  assert(status.test_mode == 0 && status.health == 0x1F);
+
+  GatewayState gateway;
+  gateway.on_frame(make_status(6, 0xFFFF, 0, 0, 0), 0);
+  assert(!gateway.queue_command(6, kCmdTestMode, kMaxTestMinutes + 1, 1));
+  assert(!gateway.queue_command(6, 0x06, 0, 1));  // unknown command
+  assert(gateway.queue_command(6, kCmdTestMode, 30, 2));
+  auto frame = gateway.next_due_command(0);
+  gateway.mark_sent(6, 0);
+  gateway.on_frame(make_ack(6, 0, frame->seq, 0), 900);
+  assert(gateway.node(6).status.test_mode == 1);
+}
+
 static void test_gateway_retry_interval() {
   GatewayState gateway;
   assert(gateway.queue_command(3, 1, 0, 42));
@@ -112,5 +133,6 @@ int main() {
   test_rejects_malformed();
   test_gateway_signal_and_status();
   test_ack_updates_known_state();
+  test_test_mode_flag_and_command();
   test_gateway_retry_interval();
 }

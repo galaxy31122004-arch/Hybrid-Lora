@@ -36,7 +36,9 @@ void GatewayState::set_signal(uint8_t node_id, int16_t rssi_dbm, float snr_db) {
 
 bool GatewayState::queue_command(uint8_t node_id, uint8_t command,
                                  uint8_t param, uint32_t rpc_id) {
-  if (node_id == 0 || node_id > kMaxNodes || command < 1 || command > 4 ||
+  if (node_id == 0 || node_id > kMaxNodes || command < packet::kCmdLightOn ||
+      command > packet::kCmdTestMode ||
+      (command == packet::kCmdTestMode && param > packet::kMaxTestMinutes) ||
       pending_[node_id].active || results_[node_id].has_value()) {
     return false;
   }
@@ -82,9 +84,10 @@ void GatewayState::finish(uint8_t node_id, bool success, uint8_t result_code) {
   // spend another SF12 STATUS on it.
   Node& node = nodes_[node_id];
   if (success && node.has_status) {
-    if (pending.command == 0x01) node.status.light_state = 1;
-    else if (pending.command == 0x02) node.status.light_state = 0;
-    else if (pending.command == 0x03) node.status.mode = pending.param ? 1 : 0;
+    if (pending.command == packet::kCmdLightOn) node.status.light_state = 1;
+    else if (pending.command == packet::kCmdLightOff) node.status.light_state = 0;
+    else if (pending.command == packet::kCmdSetMode) node.status.mode = pending.param ? 1 : 0;
+    else if (pending.command == packet::kCmdTestMode) node.status.test_mode = pending.param ? 1 : 0;
   }
   results_[node_id] = CommandResult{node_id, pending.rpc_id, success, result_code};
   pending.active = false;

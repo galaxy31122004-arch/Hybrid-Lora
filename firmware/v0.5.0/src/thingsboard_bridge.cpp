@@ -185,6 +185,7 @@ void ThingsBoardBridge::publish_one_node() {
       snapshot["lux"] = cached.node.status.lux;
       snapshot["lightState"] = cached.node.status.light_state;
       snapshot["mode"] = cached.node.status.mode;
+      snapshot["testMode"] = cached.node.status.test_mode;
     }
     char json[320];
     serializeJson(telemetry, json, sizeof(json));
@@ -210,21 +211,39 @@ void ThingsBoardBridge::on_message(char* topic, uint8_t* payload,
       id > hybrid_lora::GatewayState::kMaxNodes) return;
   device_name(id, expected, sizeof(expected));
   if (strcmp(device, expected) != 0 || !nodes_[id].seen) return;
-  if (strcmp(method, "setLight") != 0 || rpc_id == 0) {
+  if (rpc_id == 0) return;
+
+  namespace pk = hybrid_lora::packet;
+  JsonVariant params = request["data"]["params"];
+  const bool is_object = params.is<JsonObject>();
+  CloudCommand command{static_cast<uint8_t>(id), 0, 0, rpc_id};
+  if (strcmp(method, "setLight") == 0) {
+    // params: true/false or {"on": true}
+    JsonVariant on = is_object ? JsonVariant(params["on"]) : params;
+    if (!on.is<bool>()) {
+      reply(id, rpc_id, false, "invalid_params");
+      return;
+    }
+    command.command = on.as<bool>() ? pk::kCmdLightOn : pk::kCmdLightOff;
+  } else if (strcmp(method, "ping") == 0) {
+    // Node ACKs, then sends a STATUS: refreshes rssi/snr on the dashboard.
+    command.command = pk::kCmdRequestStatus;
+  } else if (strcmp(method, "setTestMode") == 0) {
+    // params: minutes (0 = off, max 120), true (= 30 min) / false, or {"minutes": n}
+    JsonVariant value = is_object ? JsonVariant(params["minutes"]) : params;
+    int minutes = -1;
+    if (value.is<bool>()) minutes = value.as<bool>() ? 30 : 0;
+    else if (value.is<int>()) minutes = value.as<int>();
+    if (minutes < 0 || minutes > pk::kMaxTestMinutes) {
+      reply(id, rpc_id, false, "invalid_params");
+      return;
+    }
+    command.command = pk::kCmdTestMode;
+    command.param = static_cast<uint8_t>(minutes);
+  } else {
     reply(id, rpc_id, false, "invalid_request");
     return;
   }
-
-  JsonVariant params = request["data"]["params"];
-  const bool is_object = params.is<JsonObject>();
-  if ((!is_object && !params.is<bool>()) ||
-      (is_object && !params["on"].is<bool>())) {
-    reply(id, rpc_id, false, "invalid_params");
-    return;
-  }
-  const bool turn_on = is_object ? params["on"].as<bool>() : params.as<bool>();
-  CloudCommand command{static_cast<uint8_t>(id),
-                       static_cast<uint8_t>(turn_on ? 1 : 2), 0, rpc_id};
   if (xQueueSend(commands_, &command, 0) != pdTRUE) {
     reply(id, rpc_id, false, "busy");
   }

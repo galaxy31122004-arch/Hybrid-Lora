@@ -25,10 +25,11 @@ Frame make_ack(uint8_t node_id, uint8_t seq, uint8_t command_seq, uint8_t result
 }
 
 Frame make_status(uint8_t node_id, uint16_t lux, uint8_t light_state,
-                  uint8_t mode, uint8_t health) {
+                  uint8_t mode, uint8_t health, uint8_t test_mode) {
   const uint8_t flags = static_cast<uint8_t>(
       (light_state ? kFlagLightOn : 0) | (mode ? kFlagRemoteMode : 0) |
-      (health << kFlagHealthShift));
+      ((health & kHealthMask) << kFlagHealthShift) |
+      (test_mode ? kFlagTestMode : 0));
   return Frame{Type::Status, node_id, 0,
                {static_cast<uint8_t>(lux), static_cast<uint8_t>(lux >> 8), flags}};
 }
@@ -55,7 +56,8 @@ bool read_status(const Frame& frame, StatusPayload& payload) {
   const uint8_t flags = frame.payload[2];
   payload.light_state = (flags & kFlagLightOn) ? 1 : 0;
   payload.mode = (flags & kFlagRemoteMode) ? 1 : 0;
-  payload.health = flags >> kFlagHealthShift;
+  payload.health = (flags >> kFlagHealthShift) & kHealthMask;
+  payload.test_mode = (flags & kFlagTestMode) ? 1 : 0;
   return true;
 }
 

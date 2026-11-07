@@ -33,7 +33,17 @@ enum class Type : uint8_t {
 // STATUS flag bits.
 constexpr uint8_t kFlagLightOn = 0x01;
 constexpr uint8_t kFlagRemoteMode = 0x02;
-constexpr uint8_t kFlagHealthShift = 2;  // bits 2..7: health flags
+constexpr uint8_t kFlagHealthShift = 2;  // bits 2..6: health flags
+constexpr uint8_t kHealthMask = 0x1F;
+constexpr uint8_t kFlagTestMode = 0x80;  // bit 7: node is in test mode
+
+// COMMAND codes.
+constexpr uint8_t kCmdLightOn = 0x01;
+constexpr uint8_t kCmdLightOff = 0x02;
+constexpr uint8_t kCmdSetMode = 0x03;      // param 0 local, 1 remote
+constexpr uint8_t kCmdRequestStatus = 0x04;
+constexpr uint8_t kCmdTestMode = 0x05;     // param = minutes, 0 = off
+constexpr uint8_t kMaxTestMinutes = 120;
 
 struct Frame {
   Type type{};
@@ -61,13 +71,14 @@ struct StatusPayload {
   uint16_t lux{};          // 0xFFFF = sensor unavailable
   uint8_t light_state{};   // 0/1
   uint8_t mode{};          // 0 local, 1 remote
-  uint8_t health{};        // 6 bits
+  uint8_t health{};        // 5 bits
+  uint8_t test_mode{};     // 0/1
 };
 
 Frame make_command(uint8_t node_id, uint8_t seq, uint8_t command, uint8_t param);
 Frame make_ack(uint8_t node_id, uint8_t seq, uint8_t command_seq, uint8_t result);
 Frame make_status(uint8_t node_id, uint16_t lux, uint8_t light_state,
-                  uint8_t mode, uint8_t health);
+                  uint8_t mode, uint8_t health, uint8_t test_mode = 0);
 Frame make_beacon(uint8_t seq);
 bool read_command(const Frame& frame, CommandPayload& payload);
 bool read_ack(const Frame& frame, AckPayload& payload);

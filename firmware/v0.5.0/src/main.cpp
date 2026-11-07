@@ -25,6 +25,11 @@ constexpr uint8_t kMaxNodes = 50;
 constexpr uint32_t kStatusPeriodMs = 900000;
 constexpr uint32_t kStatusJitterMs = 90000;
 constexpr uint32_t kChangeReportMaxDelayMs = 10000;  // random 0..10 s
+// Test mode (RPC setTestMode): STATUS every 90 s +/- 10 s for field tests.
+// 0.83 s per 90 s stays under the 1% duty cycle allowed at +20 dBm. Use it on
+// a few nodes at a time; it switches itself off after the requested minutes.
+constexpr uint32_t kTestStatusPeriodMs = 90000;
+constexpr uint32_t kTestStatusJitterMs = 10000;
 constexpr uint32_t kBeaconPeriodMs = 120000;
 constexpr uint32_t kGatewayTimeoutMs = 3 * kBeaconPeriodMs;
 // Separate channels inside the 433.05-434.79 MHz ISM band so the gateway's
@@ -48,26 +53,33 @@ uint32_t next_status_ms = 0;
 uint32_t last_beacon = 0;
 uint32_t last_gateway_beacon = 0;
 uint8_t beacon_seq = 0;
-uint8_t known_state = 0;  // light | mode bits the gateway already knows
+uint8_t known_state = 0;  // light | mode | test bits the gateway already knows
+bool test_mode = false;
+uint32_t test_mode_until_ms = 0;
 
 bool send_frame(Sx1278Radio& radio, const hybrid_lora::packet::Frame& frame) {
   const auto bytes = hybrid_lora::packet::encode(frame);
   return !bytes.empty() && radio.send(bytes.data(), bytes.size());
 }
 
-// Random offset so nodes powered on together do not report in lockstep.
-uint32_t status_delay(uint32_t base_ms) {
-  return base_ms - kStatusJitterMs + esp_random() % (2 * kStatusJitterMs);
+// Next report time, with a random offset so nodes powered on together do not
+// report in lockstep.
+uint32_t next_status_delay() {
+  const uint32_t base = test_mode ? kTestStatusPeriodMs : kStatusPeriodMs;
+  const uint32_t jitter = test_mode ? kTestStatusJitterMs : kStatusJitterMs;
+  return base - jitter + esp_random() % (2 * jitter);
 }
 
 uint8_t current_state() {
-  return (digitalRead(hybrid_lora::pins::RELAY1) ? 0x01 : 0) | (remote_mode ? 0x02 : 0);
+  return (digitalRead(hybrid_lora::pins::RELAY1) ? 0x01 : 0) |
+         (remote_mode ? 0x02 : 0) | (test_mode ? 0x04 : 0);
 }
 
 bool send_status() {
   const uint8_t state = current_state();
   if (!send_frame(radio1, hybrid_lora::packet::make_status(
-          kNodeId, 0xFFFF, state & 0x01, (state & 0x02) ? 1 : 0, 0x03))) {
+          kNodeId, 0xFFFF, state & 0x01, (state & 0x02) ? 1 : 0, 0x03,
+          (state & 0x04) ? 1 : 0))) {
     return false;
   }
   known_state = state;
@@ -82,12 +94,17 @@ void print_signal(const char* what, uint8_t node_id) {
 void handle_node_command(const hybrid_lora::packet::Frame& frame) {
   hybrid_lora::packet::CommandPayload command{};
   if (!hybrid_lora::packet::read_command(frame, command)) return;
+  namespace pk = hybrid_lora::packet;
   uint8_t result = 0x00;
-  if (command.command == 0x01) digitalWrite(hybrid_lora::pins::RELAY1, HIGH);
-  else if (command.command == 0x02) digitalWrite(hybrid_lora::pins::RELAY1, LOW);
-  else if (command.command == 0x03 && command.param <= 1) remote_mode = command.param == 1;
-  else if (command.command == 0x04) {
+  if (command.command == pk::kCmdLightOn) digitalWrite(hybrid_lora::pins::RELAY1, HIGH);
+  else if (command.command == pk::kCmdLightOff) digitalWrite(hybrid_lora::pins::RELAY1, LOW);
+  else if (command.command == pk::kCmdSetMode && command.param <= 1) remote_mode = command.param == 1;
+  else if (command.command == pk::kCmdRequestStatus) {
     next_status_ms = millis() + 2000;  // explicit request: STATUS after the ACK
+  } else if (command.command == pk::kCmdTestMode && command.param <= pk::kMaxTestMinutes) {
+    test_mode = command.param > 0;
+    test_mode_until_ms = millis() + command.param * 60000UL;
+    next_status_ms = millis() + (test_mode ? 2000 : next_status_delay());
   } else {
     result = 0x01;
   }
@@ -134,8 +151,12 @@ void process_gateway_radio() {
 void run_node(uint32_t now) {
   process_node_radio();
   // Retry on the next loop if the radio is still busy; never drop a report.
+  if (test_mode && static_cast<int32_t>(now - test_mode_until_ms) >= 0) {
+    test_mode = false;  // reported below as an unsolicited change
+    Serial.println("Test mode ended");
+  }
   if (static_cast<int32_t>(now - next_status_ms) >= 0 && send_status()) {
-    next_status_ms = now + status_delay(kStatusPeriodMs);
+    next_status_ms = now + next_status_delay();
   }
   if (remote_mode && now - last_gateway_beacon >= kGatewayTimeoutMs) {
     digitalWrite(hybrid_lora::pins::RELAY1, LOW);

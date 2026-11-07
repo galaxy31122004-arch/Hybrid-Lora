@@ -4,7 +4,7 @@ Each firmware version has its own folder with a full copy of its source:
 
 | Folder | Version | Contents | Build env |
 |---|---|---|---|
-| `v0.5.0/` | **0.5.0 (current)** | RSSI/SNR on Serial and ThingsBoard; STATUS 5 B (one SF12 block); STATUS every 900 s + on unsolicited change; ACK updates state | `esp32dev` |
+| `v0.5.0/` | **0.5.0 (current)** | RSSI/SNR on Serial and ThingsBoard; STATUS 5 B (one SF12 block); STATUS every 900 s + on unsolicited change; ACK updates state; test mode; ThingsBoard dashboard (`dashboard/`, tabs Vận hành / Test nhanh) | `esp32dev` |
 | `v0.4.0/` | 0.4.0 | Max range (SF12, 20 dBm) + packet format v2 (smaller packets, broadcast BEACON, no HEARTBEAT); own copy of packet/gateway state in `protocol/` | `esp32dev-v0_4_0` |
 | `v0.3.0/` | 0.3.0 | SX1278 fixes: RX continuous, PA_BOOST, explicit PHY settings, separate uplink/downlink channels | `esp32dev-v0_3_0` |
 | `v0.2.0/` | 0.2.0 | LoRa gateway/node + ThingsBoard Cloud bridge | `esp32dev-v0_2_0` |

@@ -434,3 +434,13 @@ Schedule changes:
 
 Every received packet's RSSI/SNR is printed on Serial and sent to
 ThingsBoard (`rssi`, `snr`) for field measurement.
+
+### v0.5.0 additions: test mode
+
+| COMMAND | Param | Effect |
+|---|---|---|
+| `0x05` TEST_MODE | minutes `0..120` (`0` = off) | STATUS every 90 s ± 10 s until the time runs out, then back to 900 s |
+
+STATUS flags: bit0 light, bit1 remote mode, bits2–6 health (5 bits), **bit7
+test mode**. 90 s keeps a node under the SX1278's 1% duty cycle at +20 dBm
+(0.83 s / 90 s ≈ 0.9%).
