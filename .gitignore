@@ -1,3 +1,4 @@
 .pio/
 .pio-core/
-firmware/common/cloud_config_local.h
+firmware/*/common/cloud_config_local.h
+releases/
