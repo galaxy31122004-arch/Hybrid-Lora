@@ -1,5 +1,9 @@
 #include <Arduino.h>
 #include <SPI.h>
+// Not used here directly: lets PlatformIO's default LDF find the libraries
+// that thingsboard_bridge.cpp needs.
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
 
 #include "packet.h"
 #include "gateway_state.h"

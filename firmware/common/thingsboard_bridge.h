@@ -5,6 +5,7 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <optional>
 
 #include "gateway_state.h"
 
@@ -33,6 +34,7 @@ class ThingsBoardBridge {
     bool seen{false};
     bool connected{false};
     bool dirty{false};
+    bool published_online{false};
     hybrid_lora::GatewayState::Node node{};
   };
 
@@ -41,7 +43,7 @@ class ThingsBoardBridge {
   void on_message(char* topic, uint8_t* payload, unsigned int length);
   void handle_event(const CloudEvent& event);
   void publish_one_node();
-  void reply(uint8_t node_id, uint32_t rpc_id, bool success, const char* error);
+  bool reply(uint8_t node_id, uint32_t rpc_id, bool success, const char* error);
   static void device_name(uint8_t node_id, char* out, size_t size);
 
   QueueHandle_t events_{nullptr};
@@ -49,5 +51,7 @@ class ThingsBoardBridge {
   WiFiClientSecure tls_;
   PubSubClient mqtt_{tls_};
   CachedNode nodes_[hybrid_lora::GatewayState::kMaxNodes + 1]{};
+  std::optional<hybrid_lora::GatewayState::CommandResult>
+      pending_results_[hybrid_lora::GatewayState::kMaxNodes + 1]{};
   uint8_t next_node_{1};
 };
