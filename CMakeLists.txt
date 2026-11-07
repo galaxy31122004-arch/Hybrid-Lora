@@ -27,3 +27,9 @@ add_executable(protocol_v040_tests tests/protocol_v040/test_protocol.cpp
   firmware/v0.4.0/protocol/packet.cpp firmware/v0.4.0/protocol/gateway_state.cpp)
 target_include_directories(protocol_v040_tests PRIVATE firmware/v0.4.0/protocol)
 add_test(NAME protocol_v040_tests COMMAND protocol_v040_tests)
+
+# Packet v3 used by firmware/v0.5.0.
+add_executable(protocol_v050_tests tests/protocol_v050/test_protocol.cpp
+  firmware/v0.5.0/protocol/packet.cpp firmware/v0.5.0/protocol/gateway_state.cpp)
+target_include_directories(protocol_v050_tests PRIVATE firmware/v0.5.0/protocol)
+add_test(NAME protocol_v050_tests COMMAND protocol_v050_tests)
