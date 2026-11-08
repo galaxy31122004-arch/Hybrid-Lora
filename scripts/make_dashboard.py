@@ -1,6 +1,6 @@
 """Generate the ThingsBoard dashboard for a firmware version.
 
-Usage: python scripts/make_dashboard.py firmware/v0.5.0/dashboard/hybrid-lora-dashboard.json
+Usage: python scripts/make_dashboard.py firmware/v0.5.1/dashboard/hybrid-lora-dashboard.json
 
 Two dashboard states (tabs):
   - "Vận hành" (default): KPI banner, node list, light on/off buttons.
@@ -36,7 +36,7 @@ def wid(name):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"hybrid-lora/widget/{name}"))
 
 
-def key(name, label, decimals=None, units=None, cell=None, style=None, color="#38bdf8"):
+def key(name, label, decimals=None, units=None, cell=None, style=None, color="#d4d4d4"):  # neutral grey: no hue outside chart lines
     settings = {}
     if cell:  # JS body: value -> display text/HTML
         settings.update(useCellContentFunction=True, cellContentFunction=cell)
@@ -223,6 +223,15 @@ def banner(name, subtitle):
     }
 
 
+TABLE_CSS = """
+.mat-mdc-row, .mat-mdc-row .mat-mdc-cell,
+.mat-mdc-row .mat-mdc-table-sticky { background: #0a0a0a !important; transition: background .15s; }
+.mat-mdc-row:hover, .mat-mdc-row:hover .mat-mdc-cell,
+.mat-mdc-row:hover .mat-mdc-table-sticky { background: #141414 !important; }
+.mat-mdc-row:hover .mat-mdc-cell:first-child { box-shadow: inset 2px 0 0 rgba(255,255,255,.55); }
+"""
+
+
 def table(name, title, keys, cell_actions, header_actions):
     config = card_style({
         "timewindow": {"realtime": {"timewindowMs": 86400000}},
@@ -238,6 +247,9 @@ def table(name, title, keys, cell_actions, header_actions):
         "datasources": [{"type": "entity", "entityAliasId": ALIAS_ID, "dataKeys": keys}],
         "actions": {"actionCellButton": cell_actions, "headerButton": header_actions},
         "showLegend": False,
+        # Hover: ThingsBoard paints the whole row and the sticky action column
+        # light grey. Keep a faint row tint and make the action column follow it.
+        "widgetCss": TABLE_CSS,
     })
     return {"typeFullFqn": "system.cards.entities_table", "type": "latest",
             "sizeX": 24, "sizeY": 9, "config": config, "id": wid(name)}
