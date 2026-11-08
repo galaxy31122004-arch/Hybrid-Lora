@@ -219,7 +219,57 @@ void sample_noise(uint32_t now) {
   cloud.post_noise(mean);
 }
 
+// Isolation self-test (type ISO on Serial, gateway only): how much of
+// radio2's own transmission leaks into radio1. radio1 needs about 65 dB of
+// isolation to still hear the weakest nodes while radio2 transmits. Move or
+// separate the antennas and run it again. Blocks the gateway for ~3.5 s and
+// sends one 64-byte junk frame on the downlink (nodes drop it).
+int16_t mean_rssi(int samples, uint32_t gap_ms) {
+  int32_t sum = 0;
+  for (int i = 0; i < samples; ++i) {
+    sum += radio1.rssi_now();
+    delay(gap_ms);
+  }
+  return static_cast<int16_t>((sum - samples / 2) / samples);
+}
+
+void isolation_test() {
+  while (radio2.transmitting()) radio2.packet_available();  // let any TX end
+  const int16_t idle = mean_rssi(20, 20);
+  uint8_t junk[64];
+  memset(junk, 0x55, sizeof(junk));  // TYPE 0x55 is not a valid packet type
+  if (!radio2.send(junk, sizeof(junk))) {
+    Serial.println("ISO: radio2 busy, try again");
+    return;
+  }
+  delay(400);  // skip the PA ramp; 64 B at SF12 is on the air ~2.8 s
+  const int16_t leak = mean_rssi(20, 100);
+  while (radio2.transmitting()) radio2.packet_available();
+  const int16_t isolation = lora_phy::kTxPowerDbm - leak;
+  Serial.printf("ISO: radio1 idle %d dBm, while radio2 sends %d dBm -> "
+                "isolation %d dB (target >= 65 dB)%s\n",
+                idle, leak, isolation,
+                leak > -30 ? " [reading near saturation: real isolation is lower]" :
+                leak - idle < 3 ? " [leak at noise floor: isolation is at least this]" : "");
+}
+
+void handle_serial() {
+  static char line[8];
+  static uint8_t length = 0;
+  while (Serial.available()) {
+    const char c = static_cast<char>(Serial.read());
+    if (c == '\n' || c == '\r') {
+      line[length] = 0;
+      if (strcasecmp(line, "ISO") == 0) isolation_test();
+      length = 0;
+    } else if (length < sizeof(line) - 1) {
+      line[length++] = c;
+    }
+  }
+}
+
 void run_gateway(uint32_t now) {
+  handle_serial();
   process_gateway_radio();
   sample_noise(now);
   radio2.packet_available();  // Complete TX and return the second radio to RX.
@@ -241,7 +291,7 @@ void run_gateway(uint32_t now) {
   while (const auto result = gateway.take_result()) {
     cloud.post_result(*result);
   }
-  if (!sent_command && !due.has_value() &&
+  if (!sent_command && !due.has_value() && !gateway.awaiting_ack(now) &&
       (!beacon_sent || now - last_beacon >= kBeaconPeriodMs)) {
     if (!send_frame(radio2, hybrid_lora::packet::make_beacon(beacon_seq++))) return;
     last_beacon = now;

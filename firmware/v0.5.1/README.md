@@ -58,7 +58,7 @@ is sent in 5-byte blocks, so every packet is kept at 5 bytes or less.
 | Packet | Bytes | Time on air at SF12 | Sent |
 |---|---|---|---|
 | STATUS | 5 (lux, flags: light, mode, health) | ≈ 0.83 s | every 900 s ± 90 s, within 10 s of any state change (including one made by a command, in case the ACK was lost), and on request |
-| COMMAND / ACK | 5 | ≈ 0.83 s | on demand; retry after 4 s, 4 attempts. A successful ACK updates the light/mode shown in ThingsBoard. |
+| COMMAND / ACK | 5 | ≈ 0.83 s | on demand, one at a time: after a COMMAND the gateway sends nothing for 2.2 s (or until the ACK arrives) so its own downlink cannot drown the ACK; retry after 2.5 s, 4 attempts. A successful ACK updates the light/mode shown in ThingsBoard. |
 | BEACON | 3, one broadcast (`NODE_ID = 0xFF`) | ≈ 0.83 s | every 120 s |
 
 Channel use with 50 nodes: uplink ≈ 4.6% (≈ 91% of reports get through
@@ -85,6 +85,25 @@ every 120 s), or press **Test 30 phút** for that node and watch its RSSI/SNR
 update on the dashboard every ~15 s (test mode sends at 17 dBm; the gateway adds the 3 dB back). At SF12 the link fails near SNR −20 dB; the margin
 left is roughly `SNR + 20` dB. With 10 dB or more to spare at the farthest
 node, a lower SF (faster, fewer collisions) is likely to work.
+
+## Antenna isolation self-test (gateway)
+
+The gateway's two radios share one board: while radio2 transmits the
+downlink at 20 dBm, radio1 can be deafened even though it listens on another
+channel. To hear the weakest nodes (about −135 dBm) at the same time, radio1
+needs roughly 65 dB of isolation from radio2.
+
+Open Serial (115200 baud) on the gateway and type `ISO` + Enter. The gateway
+measures radio1 idle, sends one 64-byte junk frame on radio2 (~2.8 s, nodes
+drop it) and measures again:
+
+```text
+ISO: radio1 idle -118 dBm, while radio2 sends -52 dBm -> isolation 72 dB (target >= 65 dB)
+```
+
+Below 65 dB: move the antennas apart (stacked vertically on one mast works
+best, about 5 m apart), shield each module, and run `ISO` again. The gateway
+pauses for ~3.5 s during the test.
 
 ## ThingsBoard Cloud setup
 
@@ -122,7 +141,7 @@ choose the file. It lists every device whose name starts with `Node-`.
 
 Switch tabs with the button in each table's header. Each button sends a
 server-side RPC to that node and shows a toast with the result; at SF12 a
-command and its ACK take about 2 s, up to ~16 s with retries.
+command and its ACK take about 2 s, up to ~10 s with retries. Commands to several nodes are sent one after another, about 2 s apart.
 
 Imported and opened on ThingsBoard Cloud 4.4.0 (both tabs, tab switching and
 the chart load). The per-node buttons could not be tried yet because no

@@ -129,6 +129,8 @@ class Sx1278Radio {
   }
   float last_snr_db() const { return last_snr_db_; }
   bool transmitting() const { return transmitting_; }
+  // Raw channel RSSI with no packet/TX checks (isolation self-test).
+  int16_t rssi_now() { return -164 + read_reg(0x1B); }
 
  private:
   static constexpr uint8_t kRegOpMode = 0x01;

@@ -46,7 +46,21 @@ bool GatewayState::queue_command(uint8_t node_id, uint8_t command,
   return true;
 }
 
+bool GatewayState::awaiting_ack(uint32_t now_ms) const {
+  for (uint8_t id = 1; id <= kMaxNodes; ++id) {
+    const Pending& pending = pending_[id];
+    if (pending.active && pending.attempts > 0 &&
+        now_ms - pending.sent_ms < kAckWindowMs) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::optional<packet::Frame> GatewayState::next_due_command(uint32_t now_ms) {
+  // One command in flight at a time: sending to node B while node A's ACK
+  // is arriving would lose that ACK (half duplex on one board).
+  if (awaiting_ack(now_ms)) return std::nullopt;
   for (uint8_t id = 1; id <= kMaxNodes; ++id) {
     Pending& pending = pending_[id];
     if (!pending.active) continue;

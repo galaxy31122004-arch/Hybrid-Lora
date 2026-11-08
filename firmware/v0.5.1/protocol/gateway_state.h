@@ -11,8 +11,11 @@ namespace hybrid_lora {
 class GatewayState {
  public:
   static constexpr uint8_t kMaxNodes = 50;
-  // SF12: COMMAND (~0.83 s) + node processing + ACK (~0.83 s) < 4 s.
-  static constexpr uint32_t kRetryMs = 4000;
+  // SF12: COMMAND (~0.83 s) + node processing + ACK (~0.83 s) ~= 1.7 s.
+  // While that ACK may be on the air the gateway does not transmit at all:
+  // radio2 on the same board would deafen radio1 and the ACK would be lost.
+  static constexpr uint32_t kAckWindowMs = 2200;
+  static constexpr uint32_t kRetryMs = 2500;  // >= kAckWindowMs
   static constexpr uint8_t kMaxAttempts = 4;
 
   struct Node {
@@ -40,6 +43,9 @@ class GatewayState {
                      uint32_t rpc_id);
   std::optional<packet::Frame> next_due_command(uint32_t now_ms);
   void mark_sent(uint8_t node_id, uint32_t now_ms);
+  // True while an ACK for the last COMMAND may still be arriving. The
+  // gateway sends nothing (no COMMAND, no BEACON) during this window.
+  bool awaiting_ack(uint32_t now_ms) const;
   std::optional<CommandResult> take_result();
 
  private:

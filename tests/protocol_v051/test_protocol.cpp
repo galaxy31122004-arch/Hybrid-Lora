@@ -143,7 +143,34 @@ static void test_test_mode_known_before_first_status() {
   assert(gateway.node(7).status.light_state == 0);  // no STATUS yet
 }
 
+// v0.5.1: commands to two nodes back to back. The second must wait until
+// the first ACK has arrived (or its window has passed), never overlap it.
+static void test_ack_window_serializes_commands() {
+  GatewayState gateway;
+  assert(gateway.queue_command(1, kCmdLightOn, 0, 10));
+  assert(gateway.queue_command(2, kCmdLightOn, 0, 11));
+  auto first = gateway.next_due_command(0);
+  assert(first.has_value() && first->node_id == 1);
+  gateway.mark_sent(1, 0);
+  assert(gateway.awaiting_ack(0));
+  // node 2 is held back while node 1's ACK may be on the air
+  assert(!gateway.next_due_command(900).has_value());
+  assert(!gateway.next_due_command(GatewayState::kAckWindowMs - 1).has_value());
+  // ACK arrives early: the gateway is free at once
+  gateway.on_frame(make_ack(1, 0, first->seq, 0), 1700);
+  assert(!gateway.awaiting_ack(1700));
+  auto second = gateway.next_due_command(1700);
+  assert(second.has_value() && second->node_id == 2);
+  gateway.mark_sent(2, 1700);
+  // no ACK: free again after the window, retry after kRetryMs
+  assert(gateway.awaiting_ack(1700 + GatewayState::kAckWindowMs - 1));
+  assert(!gateway.awaiting_ack(1700 + GatewayState::kAckWindowMs));
+  assert(!gateway.next_due_command(1700 + GatewayState::kAckWindowMs).has_value());
+  assert(gateway.next_due_command(1700 + GatewayState::kRetryMs).has_value());
+}
+
 int main() {
+  test_ack_window_serializes_commands();
   test_test_mode_known_before_first_status();
   test_sizes();
   test_status_layout_and_round_trip();
