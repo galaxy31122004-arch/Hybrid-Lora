@@ -4,7 +4,8 @@ Each firmware version has its own folder with a full copy of its source:
 
 | Folder | Version | Contents | Build env |
 |---|---|---|---|
-| `v0.5.0/` | **0.5.0 (current)** | RSSI/SNR on Serial and ThingsBoard; STATUS 5 B (one SF12 block); STATUS every 900 s + on unsolicited change; ACK updates state; test mode; ThingsBoard dashboard (`dashboard/`, tabs Vận hành / Test nhanh) | `esp32dev` |
+| `v0.5.1/` | **0.5.1 (current)** | Fixes from the v0.5.0 review: STATUS after command-made changes (lost ACK), RSSI formula for SNR >= 0, noise floor skips own TX and rounds, test-mode offset known before first STATUS, RPC id 0 accepted, empty CA detected, neutral dashboard key colour. Same packet format as v0.5.0 | `esp32dev` |
+| `v0.5.0/` | 0.5.0 | RSSI/SNR on Serial and ThingsBoard; STATUS 5 B (one SF12 block); STATUS every 900 s + on unsolicited change; ACK updates state; test mode; ThingsBoard dashboard (`dashboard/`, tabs Vận hành / Test nhanh) | `esp32dev-v0_5_0` |
 | `v0.4.0/` | 0.4.0 | Max range (SF12, 20 dBm) + packet format v2 (smaller packets, broadcast BEACON, no HEARTBEAT); own copy of packet/gateway state in `protocol/` | `esp32dev-v0_4_0` |
 | `v0.3.0/` | 0.3.0 | SX1278 fixes: RX continuous, PA_BOOST, explicit PHY settings, separate uplink/downlink channels | `esp32dev-v0_3_0` |
 | `v0.2.0/` | 0.2.0 | LoRa gateway/node + ThingsBoard Cloud bridge | `esp32dev-v0_2_0` |
@@ -19,7 +20,7 @@ each folder keeps a build env so the version can be rebuilt exactly.
 From the repository root:
 
 ```text
-pio run -e esp32dev                 # current version (v0.5.0)
+pio run -e esp32dev                 # current version (v0.5.1)
 pio run -e esp32dev-v0_2_0          # an older version
 pio run -e esp32dev -t upload --upload-port COM3
 ```

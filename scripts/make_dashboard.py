@@ -1,6 +1,6 @@
 """Generate the ThingsBoard dashboard for a firmware version.
 
-Usage: python scripts/make_dashboard.py firmware/v0.5.0/dashboard/hybrid-lora-dashboard.json
+Usage: python scripts/make_dashboard.py firmware/v0.5.1/dashboard/hybrid-lora-dashboard.json
 
 Two dashboard states (tabs):
   - "Vận hành" (default): KPI banner, node list, light on/off buttons.
@@ -36,7 +36,7 @@ def wid(name):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"hybrid-lora/widget/{name}"))
 
 
-def key(name, label, decimals=None, units=None, cell=None, style=None, color="#38bdf8"):
+def key(name, label, decimals=None, units=None, cell=None, style=None, color="#d4d4d4"):  # neutral grey: no hue outside chart lines
     settings = {}
     if cell:  # JS body: value -> display text/HTML
         settings.update(useCellContentFunction=True, cellContentFunction=cell)
