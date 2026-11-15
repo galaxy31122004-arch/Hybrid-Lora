@@ -147,24 +147,38 @@ pauses for ~3.5 s during the test.
 
 1. In ThingsBoard Cloud, create a device named **`Hybrid-LoRa-Gateway`** (the dashboard looks for this name), enable **Is gateway**,
    and copy its access token. Use the Cloud region associated with your account.
-2. Copy `firmware/v0.5.1/common/cloud_config_local.example.h` to
-   `firmware/v0.5.1/common/cloud_config_local.h`. Enter the Wi-Fi SSID and password,
-   gateway access token, MQTT host, and the PEM root CA certificate from the
-   device's **Check connectivity** dialog. This local file is ignored by Git.
+2. Copy `firmware/v0.5.2/common/cloud_config_local.example.h` to
+   `firmware/v0.5.2/common/cloud_config_local.h`. Enter the gateway access
+   token, MQTT host, and the PEM root CA certificate from the device's
+   **Check connectivity** dialog. This local file is ignored by Git.
    The North America MQTT host is `mqtt.thingsboard.cloud`; for another region,
    use the host shown in your Cloud account. TLS uses port 8883.
-3. Set `MODE = LOW` on the gateway board and upload from the repository root:
+3. Wi-Fi (since v0.5.2) follows the `esp32-wifi-provisioning` skill: no SSID or
+   password in this repository. Networks live in `D:\Secrets\wifi-credentials.json`
+   and are compiled into `include/wifi_secrets.h` (generated, ignored by Git).
+   The gateway keeps up to 8 networks in NVS, joins the strongest known one,
+   and opens a setup portal (AP `ESP32-Setup-XXXX`, http://192.168.4.1) when
+   none works. Wi-Fi runs in the ThingsBoard task, so it never stalls LoRa.
+   Before each flash, with the board plugged in:
+
+   ```text
+   powershell -ExecutionPolicy Bypass -File D:\Personal-Skills\esp32-wifi-provisioning\scripts\pull-wifi-from-board.ps1 -Port COM3
+   powershell -ExecutionPolicy Bypass -File D:\Personal-Skills\esp32-wifi-provisioning\scripts\make-wifi-secrets.ps1 -Project firmware\v0.5.2
+   ```
+
+   The ESP32 uses 2.4 GHz only. Wi-Fi starts only when step 2 is filled in.
+4. Set `MODE = LOW` on the gateway board and upload from the repository root:
 
    ```text
    pio run -e esp32dev -t upload --upload-port COM3
    ```
 
-4. After a node sends a valid `STATUS` or ACK, the gateway announces it as
+5. After a node sends a valid `STATUS` or ACK, the gateway announces it as
    `Node-01` through `Node-50`, with telemetry `online`, `healthFlags`, `lux`,
    `lightState`, `mode`, `testMode`, `rssi`, and `snr`. `lux = 65535` means the
    sensor value is unavailable in this firmware. `online` becomes false about
    50 minutes after the last valid report.
-5. Import the dashboard (below).
+6. Import the dashboard (below).
 
 ## ThingsBoard dashboard
 

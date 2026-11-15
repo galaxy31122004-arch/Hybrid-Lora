@@ -4,12 +4,8 @@
 #include "cloud_config_local.h"
 #endif
 
-#ifndef CLOUD_WIFI_SSID
-#define CLOUD_WIFI_SSID ""
-#endif
-#ifndef CLOUD_WIFI_PASSWORD
-#define CLOUD_WIFI_PASSWORD ""
-#endif
+// Wi-Fi is not configured here: networks come from include/wifi_secrets.h
+// (generated, gitignored) and the board's NVS, see src/wifi_nvs.cpp.
 #ifndef CLOUD_ACCESS_TOKEN
 #define CLOUD_ACCESS_TOKEN ""
 #endif

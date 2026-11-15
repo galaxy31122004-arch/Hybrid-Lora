@@ -11,6 +11,7 @@
 #include "pins.h"
 #include "sx1278_radio.h"
 #include "thingsboard_bridge.h"
+#include "wifi_nvs.h"
 
 namespace {
 constexpr uint8_t kNodeId = 1;
@@ -301,6 +302,12 @@ void isolation_test() {
 }
 
 void run_serial_command(char* line) {
+  // Lines starting with '#' belong to the Wi-Fi module (#wifi-list for
+  // pull-wifi-from-board.ps1); it does not read Serial itself here.
+  if (line[0] == '#') {
+    if (gateway_role) wifinvs::handleSerialLine(String(line));
+    return;
+  }
   char* arg = strchr(line, ' ');
   if (arg) *arg++ = 0;
   const long value = arg ? strtol(arg, nullptr, 10) : -1;
@@ -330,7 +337,7 @@ void run_serial_command(char* line) {
 }
 
 void handle_serial() {
-  static char line[16];
+  static char line[32];
   static uint8_t length = 0;
   while (Serial.available()) {
     const char c = static_cast<char>(Serial.read());

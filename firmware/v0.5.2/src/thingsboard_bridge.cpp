@@ -3,6 +3,7 @@
 #include <time.h>
 
 #include "cloud_config.h"
+#include "wifi_nvs.h"
 
 namespace {
 constexpr char kConnectTopic[] = "v1/gateway/connect";
@@ -17,9 +18,9 @@ constexpr uint32_t kNodeOnlineMs = 3 * 990000;
 void ThingsBoardBridge::begin() {
   // The example file leaves an empty PEM block (a newline), so look for the
   // certificate header rather than an empty string.
-  if (!CLOUD_WIFI_SSID[0] || !CLOUD_ACCESS_TOKEN[0] ||
+  if (!CLOUD_ACCESS_TOKEN[0] ||
       strstr(CLOUD_ROOT_CA, "-----BEGIN CERTIFICATE-----") == nullptr) {
-    Serial.println("ThingsBoard disabled: configure Wi-Fi, token and CA cert");
+    Serial.println("ThingsBoard disabled: configure token and CA cert");
     return;
   }
   events_ = xQueueCreate(64, sizeof(CloudEvent));
@@ -75,7 +76,9 @@ void ThingsBoardBridge::task_entry(void* context) {
 }
 
 void ThingsBoardBridge::task_loop() {
-  WiFi.mode(WIFI_STA);
+  // Wi-Fi runs in this task (core 0): scanning, connecting and the setup
+  // portal can take seconds and must never stall the LoRa loop.
+  wifinvs::begin();
   tls_.setCACert(CLOUD_ROOT_CA);
   tls_.setTimeout(1000);
   mqtt_.setServer(CLOUD_MQTT_HOST, 8883);
@@ -85,7 +88,6 @@ void ThingsBoardBridge::task_loop() {
     on_message(topic, payload, length);
   });
 
-  uint32_t last_wifi_attempt = 0;
   uint32_t last_mqtt_attempt = 0;
   bool clock_started = false;
   while (true) {
@@ -93,11 +95,8 @@ void ThingsBoardBridge::task_loop() {
     while (xQueueReceive(events_, &event, 0) == pdTRUE) handle_event(event);
 
     const uint32_t now = millis();
-    if (WiFi.status() != WL_CONNECTED) {
-      if (last_wifi_attempt == 0 || now - last_wifi_attempt >= kReconnectMs) {
-        last_wifi_attempt = now;
-        WiFi.begin(CLOUD_WIFI_SSID, CLOUD_WIFI_PASSWORD);
-      }
+    wifinvs::loop();  // reconnects, or serves the setup portal
+    if (!wifinvs::isConnected()) {
       clock_started = false;
     } else {
       if (!clock_started) {
