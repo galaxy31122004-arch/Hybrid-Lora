@@ -444,3 +444,13 @@ ThingsBoard (`rssi`, `snr`) for field measurement.
 STATUS flags: bit0 light, bit1 remote mode, bits2–6 health (5 bits), **bit7
 test mode**. At 17 dBm the SX1278 1% limit for +20 dBm does not apply; 15 s gives
 0.83 s / 15 s ≈ 5.5% air time per test node (under the usual 10%). The gateway adds the 3 dB power difference back to the RSSI/SNR it reports, so test samples compare with normal operation. The gateway also publishes the uplink noise floor (`noiseFloor`, mean of 5 idle readings, ~every 10 s) as its own telemetry.
+
+### v0.5.2: test STATUS
+
+With the test bit (flags bit 7) set, a STATUS is a test STATUS: the same
+5 bytes and air time, so a field test uses the real uplink path. LUX
+(bytes 2–3) carries a 16-bit sequence number and the health bits (2–6) carry
+the node's TX power in dBm. Light and mode bits stay real. The gateway counts
+gaps in the sequence as lost packets (a jump of more than 1000 is a node
+restart) and reports PDR over the last 20 packets. A v0.5.1 gateway would
+read the sequence as lux, so test mode needs 0.5.2 on both ends.

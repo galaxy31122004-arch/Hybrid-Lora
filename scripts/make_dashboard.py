@@ -1,6 +1,6 @@
 """Generate the ThingsBoard dashboard for a firmware version.
 
-Usage: python scripts/make_dashboard.py firmware/v0.5.1/dashboard/hybrid-lora-dashboard.json
+Usage: python scripts/make_dashboard.py firmware/v0.5.2/dashboard/hybrid-lora-dashboard.json
 
 Two dashboard states (tabs):
   - "Vận hành" (default): KPI banner, node list, light on/off buttons.
@@ -88,6 +88,12 @@ SNR_STYLE = ("var m = Number(value) + 20;"
              "var st = m >= 10 ? {" + FRAME + "} : (m >= 5 ? {" + DASHED + "} : {border:'1px dotted rgba(255,255,255,.35)', borderRadius:'999px'});"
              "st.color = m >= 5 ? '#ffffff' : '#a3a3a3'; st.fontFamily = 'monospace';"
              "st.whiteSpace = 'nowrap'; return st;")
+
+# Test STATUS packet delivery over the last 20 packets (v0.5.2).
+PDR = "return (value === '' || value === null || value === undefined) ? '—' : Math.round(Number(value)) + ' %';"
+PDR_STYLE = ("var p = Number(value);"
+             "var c = p >= 90 ? '#ffffff' : (p >= 70 ? '#a3a3a3' : '" + MUTED + "');"
+             "return {color:c, fontFamily:'monospace', fontWeight:600};")
 
 
 def rpc_action(label, icon, method, params, ok_text):
@@ -308,6 +314,8 @@ def build():
         [key("online", "Trạng thái", cell=ONLINE, style=ONLINE_STYLE),
          key("rssi", "RSSI", cell=RSSI, style=RSSI_STYLE),
          key("snr", "SNR · dư tín hiệu", cell=SNR, style=SNR_STYLE),
+         key("pdr", "Gói tới (20)", cell=PDR, style=PDR_STYLE),
+         key("lost", "Mất", cell="return (value === '' || value === undefined) ? '—' : value;", style="return " + DIM + ";"),
          key("testMode", "Test", cell=TEST, style=TEST_STYLE),
          key("lightState", "Đèn", cell=LIGHT, style=LIGHT_STYLE)],
         [ping, test_on, test_off, light_on, light_off],
