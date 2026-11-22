@@ -1,6 +1,6 @@
 """Generate the ThingsBoard dashboard for a firmware version.
 
-Usage: python scripts/make_dashboard.py firmware/v0.5.2/dashboard/hybrid-lora-dashboard.json
+Usage: python scripts/make_dashboard.py firmware/v0.5.4/dashboard/hybrid-lora-dashboard.json
 
 Two dashboard states (tabs):
   - "Vận hành" (default): KPI banner, node list, light on/off buttons.
@@ -95,6 +95,16 @@ PDR_STYLE = ("var p = Number(value);"
              "var c = p >= 90 ? '#ffffff' : (p >= 70 ? '#a3a3a3' : '" + MUTED + "');"
              "return {color:c, fontFamily:'monospace', fontWeight:600};")
 
+# Node's own Wi-Fi report (v0.5.4): nodeSeen = epoch seconds of the last
+# report (every 10 s). Older than 30 s = node off or out of Wi-Fi.
+NODE_WIFI = ("var t = Number(value); if (!t) return '—';"
+             "var age = Math.round(Date.now() / 1000 - t);"
+             "if (age < 30) return '● BẬT';"
+             "return '○ ' + (age < 120 ? age + ' s' : Math.round(age / 60) + ' phút') + ' trước';")
+NODE_WIFI_STYLE = ("var t = Number(value); var on = t && (Date.now() / 1000 - t) < 30;"
+                   "return on ? {color:'#ffffff', fontWeight:600, letterSpacing:'.08em', whiteSpace:'nowrap'}"
+                   " : {color:'" + MUTED + "', letterSpacing:'.08em', whiteSpace:'nowrap'};")
+
 
 def rpc_action(label, icon, method, params, ok_text):
     body = json.dumps({"method": method, "params": params, "timeout": 60000})
@@ -172,7 +182,8 @@ function tile(cls, label, value, sub) {
 }
 var worstText = worst ? (worst.snr + 20).toFixed(1) + ' dB' : '—';
 return '<div class="banner"><div class="head"><div class="t"><b>Hybrid</b>·LoRa</div>' +
-  '<div class="st">__SUBTITLE__</div></div><div class="tiles">' +
+  '<div class="st">__SUBTITLE__</div>' +
+  '<div class="tabs">__TABS__</div></div><div class="tiles">' +
   tile('', 'Node', names.length) +
   tile('hl', 'Online', online, names.length ? Math.round(online * 100 / names.length) + '%' : '') +
   tile('', 'Đèn bật', lights) +
@@ -208,11 +219,33 @@ BANNER_CSS = """
 .tile .l { margin-top: 2px; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #9a9a9a; }
 .tile .s { font-size: 10px; color: #6b6b6b; letter-spacing: .08em; }
 .tile.hl { border-color: rgba(255,255,255,.35); }
+/* Tab switch inside the banner (element-click actions open the other state) */
+.banner .tabs { display: flex; gap: 8px; margin-top: 12px; }
+.banner .tab { cursor: pointer; padding: 6px 14px; border-radius: 999px; font-size: 11px;
+  letter-spacing: .16em; text-transform: uppercase; color: #8a8a8a;
+  border: 1px solid rgba(255,255,255,.12); user-select: none; }
+.banner .tab:hover { color: #fff; border-color: rgba(255,255,255,.4); }
+.banner .tab.on { color: #0a0a0a; background: #ededed; border-color: #ededed; cursor: default; }
 """
 
 
-def banner(name, subtitle):
+STATE_TABS = [("default", "Vận hành"), ("test", "Test nhanh")]
+
+
+def banner(name, subtitle, state):
     keys = [key(k, k) for k in ("online", "lightState", "testMode", "snr")]
+    # Tabs are plain elements; an "elementClick" action whose name equals the
+    # element id switches the dashboard state. Works on phones too, where the
+    # table header buttons are easy to miss.
+    tabs = "".join(
+        f'<span id="tab-{sid}" class="tab{" on" if sid == state else ""}">{label}</span>'
+        for sid, label in STATE_TABS)
+    clicks = [{"name": f"tab-{sid}", "icon": "tab", "type": "openDashboardState",
+               "targetDashboardStateId": sid, "setEntityId": False,
+               "stateEntityParamName": None, "openInSeparateDialog": False,
+               "openInPopover": False,
+               "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"tab/{name}/{sid}"))}
+              for sid, _ in STATE_TABS if sid != state]
     return {
         "typeFullFqn": "system.cards.markdown_card",
         "type": "latest",
@@ -221,9 +254,11 @@ def banner(name, subtitle):
             "showTitle": False, "backgroundColor": "transparent", "padding": "0px",
             "dropShadow": False, "enableFullscreen": False,
             "settings": {"useMarkdownTextFunction": True,
-                         "markdownTextFunction": BANNER_FN.replace("__SUBTITLE__", subtitle),
+                         "markdownTextFunction": BANNER_FN.replace("__SUBTITLE__", subtitle)
+                                                         .replace("__TABS__", tabs.replace("'", "\\'")),
                          "markdownCss": BANNER_CSS, "applyDefaultMarkdownStyle": False},
             "datasources": [{"type": "entity", "entityAliasId": ALIAS_ID, "dataKeys": keys}],
+            "actions": {"elementClick": clicks},
         },
         "id": wid(name),
     }
@@ -261,6 +296,143 @@ def table(name, title, keys, cell_actions, header_actions):
             "sizeX": 24, "sizeY": 9, "config": config, "id": wid(name)}
 
 
+def ts_table(name, title, keys, alias, header_actions=(), hours=6):
+    """One row per received value with its time (like the gateway's Serial
+    log). ThingsBoard shows one tab per device and offers CSV export."""
+    config = card_style({
+        "timewindow": {"realtime": {"timewindowMs": hours * 3600000}},
+        "showTitle": True, "title": title,
+        "settings": {"enableSearch": True, "enableStickyHeader": True,
+                     "showTimestamp": True, "displayPagination": True,
+                     "defaultPageSize": 20, "hideEmptyLines": True,
+                     "enableSelectColumnDisplay": False},
+        "datasources": [{"type": "entity", "entityAliasId": alias, "dataKeys": keys}],
+        "actions": {"headerButton": list(header_actions)},
+        "showLegend": False,
+        "widgetCss": TABLE_CSS,
+    })
+    return {"typeFullFqn": "system.cards.timeseries_table", "type": "timeseries",
+            "sizeX": 24, "sizeY": 8, "config": config, "id": wid(name)}
+
+
+# Field points: the phone's browser GPS, stored on the gateway device.
+# "Đặt vị trí Gateway" saves the gateway's position (server attributes
+# latitude/longitude); "Ghi điểm đo" saves the node's spot as telemetry with
+# the distance to the gateway, so each spot lines up in time with the packets
+# in "Nhật ký test". Needs location permission in the browser (HTTPS).
+GEO_JS = """
+const http = widgetContext.http;
+const err = (m) => widgetContext.showErrorToast(m, 'top', 'center', null, true);
+function withGateway(cb) {
+  http.get('/api/tenant/devices?deviceName=__GW__').subscribe(
+    (d) => cb(d.id.id),
+    () => err('Chưa có thiết bị __GW__ trên ThingsBoard'));
+}
+function withPosition(cb) {
+  if (!navigator.geolocation) { err('Trình duyệt không hỗ trợ GPS'); return; }
+  widgetContext.showSuccessToast('Đang lấy vị trí GPS...', 2000);
+  navigator.geolocation.getCurrentPosition(
+    (p) => cb(p.coords),
+    (e) => err('Không lấy được vị trí: ' + e.message + ' (cho phép quyền vị trí cho trang này)'),
+    {enableHighAccuracy: true, timeout: 20000, maximumAge: 0});
+}
+function distanceM(a, b, c, d) {
+  const r = Math.PI / 180, R = 6371000;
+  const x = Math.sin((c - a) * r / 2) ** 2 +
+            Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(x)));
+}
+"""
+
+MARK_POINT_JS = GEO_JS + """
+const note = window.prompt('Ghi chú cho điểm đo (vd. cột đèn 12), có thể bỏ trống:', '');
+if (note === null) return;
+withGateway((id) => withPosition((c) => {
+  http.get('/api/plugins/telemetry/DEVICE/' + id +
+           '/values/attributes/SERVER_SCOPE?keys=latitude,longitude').subscribe((attrs) => {
+    const a = {};
+    (attrs || []).forEach((x) => a[x.key] = Number(x.value));
+    const point = {pointLat: c.latitude, pointLon: c.longitude,
+                   pointAcc: Math.round(c.accuracy), pointLabel: note || '—'};
+    if (a.latitude !== undefined && a.longitude !== undefined) {
+      point.pointDist = distanceM(a.latitude, a.longitude, c.latitude, c.longitude);
+    }
+    http.post('/api/plugins/telemetry/DEVICE/' + id + '/timeseries/ANY', point).subscribe(
+      () => widgetContext.showSuccessToast('Đã ghi điểm đo' +
+            (point.pointDist !== undefined ? ' · cách Gateway ' + point.pointDist + ' m' :
+             ' (chưa đặt vị trí Gateway nên chưa có khoảng cách)') +
+            ' · sai số ±' + point.pointAcc + ' m', 4000),
+      () => err('Không lưu được điểm đo'));
+  });
+}));
+"""
+
+SET_GATEWAY_JS = GEO_JS + """
+withGateway((id) => withPosition((c) => {
+  http.post('/api/plugins/telemetry/DEVICE/' + id + '/attributes/SERVER_SCOPE',
+            {latitude: c.latitude, longitude: c.longitude}).subscribe(
+    () => widgetContext.showSuccessToast('Đã lưu vị trí Gateway · sai số ±' +
+                                         Math.round(c.accuracy) + ' m', 4000),
+    () => err('Không lưu được vị trí Gateway'));
+}));
+"""
+
+
+def ts_key(name, ktype="timeseries"):
+    return {"name": name, "type": ktype, "label": name, "settings": {}, "color": "#ffffff"}
+
+
+def field_map(name, title, hours=24):
+    """ThingsBoard 4.x map (system "route_map"): the walk through the field
+    points as a dark path with a dot per point, plus the gateway marker.
+    Only the fields set here are given; the widget fills the rest with its
+    defaults (OpenStreetMap tiles, controls)."""
+    # Dark marks: map tiles are light, so white points would vanish.
+    white = {"type": "constant", "color": "#111111"}
+    tip = ("<b>${pointLabel}</b><br/>cách Gateway ${pointDist} m<br/>"
+           "sai số ±${pointAcc} m<br/>${ts}")
+    settings = {
+        "mapType": "geoMap",
+        "fitMapBounds": True,
+        "trips": [{
+            "dsType": "entity", "dsEntityAliasId": GATEWAY_ALIAS_ID, "dsLabel": "Điểm đo",
+            "xKey": ts_key("pointLat"), "yKey": ts_key("pointLon"),
+            "additionalDataKeys": [ts_key("pointLabel"), ts_key("pointDist"), ts_key("pointAcc")],
+            "label": {"show": False, "type": "pattern", "pattern": ""},
+            "tooltip": {"show": True, "trigger": "click", "autoclose": True,
+                        "type": "pattern", "pattern": tip, "offsetX": 0, "offsetY": -1},
+            "showPath": True, "pathStrokeWeight": 2, "pathStrokeColor": white,
+            "showPoints": True, "pointSize": 12, "pointColor": white,
+            "pointTooltip": {"show": True, "trigger": "click", "autoclose": True,
+                             "type": "pattern", "pattern": tip, "offsetX": 0, "offsetY": -1},
+        }],
+        "markers": [{
+            "dsType": "entity", "dsEntityAliasId": GATEWAY_ALIAS_ID, "dsLabel": "Gateway",
+            "xKey": ts_key("latitude", "attribute"), "yKey": ts_key("longitude", "attribute"),
+            "additionalDataKeys": [],
+            "label": {"show": True, "type": "pattern", "pattern": "Gateway"},
+            "tooltip": {"show": False, "trigger": "click", "autoclose": True,
+                        "type": "pattern", "pattern": "", "offsetX": 0, "offsetY": -1},
+        }],
+        "tripTimeline": {"showTimelineControl": False},
+    }
+    config = card_style({
+        "useDashboardTimewindow": False, "displayTimewindow": True,
+        "timewindow": {"realtime": {"realtimeType": 0, "timewindowMs": hours * 3600000},
+                       "aggregation": {"type": "NONE", "limit": 50000}},
+        "showTitle": True, "title": title, "settings": settings, "datasources": [],
+    })
+    return {"typeFullFqn": "system.route_map", "type": "timeseries",
+            "sizeX": 24, "sizeY": 10, "config": config, "id": wid(name)}
+
+
+def js_action(label, icon, code):
+    return {"name": label, "icon": icon, "type": "custom", "customFunction": code,
+            "useShowWidgetActionFunction": None, "showWidgetActionFunction": "return true;",
+            "openInSeparateDialog": False, "openInPopover": False,
+            "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"js/{label}"))}
+
+
 def chart(name, title, data_key, alias=None, width=12):
     config = card_style({
         "timewindow": {"realtime": {"timewindowMs": 3600000}},
@@ -276,13 +448,22 @@ def chart(name, title, data_key, alias=None, width=12):
             "sizeX": width, "sizeY": 8, "config": config, "id": wid(name)}
 
 
+# Height in grid rows on a phone (narrow screens stack widgets in one column).
+MOBILE_HEIGHT = {"system.cards.markdown_card": 5, "system.cards.entities_table": 7,
+                 "system.cards.timeseries_table": 8, "system.charts.basic_timeseries": 6,
+                 "system.route_map": 9}
+
+
 def layout(widgets):
     """Stack widgets top to bottom; widgets narrower than 24 share a row."""
     cells, row, col, row_height = {}, 0, 0, 0
     for w in widgets:
         if col + w["sizeX"] > 24:
             row, col, row_height = row + row_height, 0, 0
-        cells[w["id"]] = {"sizeX": w["sizeX"], "sizeY": w["sizeY"], "row": row, "col": col}
+        # Phone: one column in list order, with a fixed height per widget.
+        cells[w["id"]] = {"sizeX": w["sizeX"], "sizeY": w["sizeY"], "row": row, "col": col,
+                          "mobileOrder": len(cells),
+                          "mobileHeight": MOBILE_HEIGHT.get(w["typeFullFqn"], w["sizeY"])}
         col += w["sizeX"]
         row_height = max(row_height, w["sizeY"])
     return {"main": {"widgets": cells,
@@ -295,11 +476,11 @@ def build():
     light_on = rpc_action("Bật đèn", "lightbulb", "setLight", True, "đã bật đèn")
     light_off = rpc_action("Tắt đèn", "lightbulb_outline", "setLight", False, "đã tắt đèn")
     ping = rpc_action("Ping", "network_ping", "ping", {}, "đã trả lời, RSSI/SNR sẽ cập nhật sau STATUS")
-    test_on = rpc_action("Test 30 phút", "science", "setTestMode", 30, "đã bật test 30 phút (STATUS mỗi 15 s)")
+    test_on = rpc_action("Test 30 phút", "science", "setTestMode", 30, "đã bật test 30 phút (STATUS mỗi 30 s)")
     test_off = rpc_action("Tắt test", "stop_circle", "setTestMode", 0, "đã tắt test")
 
-    banner_op = banner("banner-operation", "Vận hành · LoRa SF12 · 433 MHz")
-    banner_test = banner("banner-test", "Test nhanh · tín hiệu · ping · test mode")
+    banner_op = banner("banner-operation", "Vận hành · LoRa SF12 · 433 MHz", "default")
+    banner_test = banner("banner-test", "Test nhanh · tín hiệu · ping · test mode", "test")
     operation = table(
         "operation", "Danh sách Node",
         [key("online", "Trạng thái", cell=ONLINE, style=ONLINE_STYLE),
@@ -312,10 +493,12 @@ def build():
     test_table = table(
         "test", "Tín hiệu · SF12 mất sóng tại SNR −20 dB",
         [key("online", "Trạng thái", cell=ONLINE, style=ONLINE_STYLE),
+         key("nodeSeen", "Node WiFi", cell=NODE_WIFI, style=NODE_WIFI_STYLE),
          key("rssi", "RSSI", cell=RSSI, style=RSSI_STYLE),
          key("snr", "SNR · dư tín hiệu", cell=SNR, style=SNR_STYLE),
          key("pdr", "Gói tới (20)", cell=PDR, style=PDR_STYLE),
          key("lost", "Mất", cell="return (value === '' || value === undefined) ? '—' : value;", style="return " + DIM + ";"),
+         key("nodeTx", "Đã phát", cell="return (value === '' || value === undefined) ? '—' : value;", style="return " + DIM + ";"),
          key("testMode", "Test", cell=TEST, style=TEST_STYLE),
          key("lightState", "Đèn", cell=LIGHT, style=LIGHT_STYLE)],
         [ping, test_on, test_off, light_on, light_off],
@@ -330,8 +513,28 @@ def build():
                         key("noiseFloor", "Nhiễu nền", 0, "dBm", color="#a3a3a3"),
                         alias=GATEWAY_ALIAS_ID, width=24)
 
+    log = ts_table("test-log", "Nhật ký test · mỗi gói một dòng · tải CSV ở góc phải",
+                   [key("seq", "Seq"),
+                    key("rssi", "RSSI", cell=RSSI, style=RSSI_STYLE),
+                    key("snr", "SNR", 1, "dB"),
+                    key("lost", "Mất"),
+                    key("pdr", "Gói tới (20)", cell=PDR, style=PDR_STYLE)],
+                   ALIAS_ID)
+    points = ts_table("points", "Điểm đo · GPS điện thoại",
+                      [key("pointLabel", "Ghi chú"),
+                       key("pointDist", "Cách Gateway", 0, "m"),
+                       key("pointAcc", "Sai số", 0, "m"),
+                       key("pointLat", "Vĩ độ", 6), key("pointLon", "Kinh độ", 6)],
+                      GATEWAY_ALIAS_ID,
+                      [js_action("Ghi điểm đo", "add_location", MARK_POINT_JS.replace("__GW__", GATEWAY_NAME)),
+                       js_action("Đặt vị trí Gateway", "my_location",
+                                 SET_GATEWAY_JS.replace("__GW__", GATEWAY_NAME))],
+                      hours=24)
+
+    field = field_map("field-map", "Bản đồ điểm đo · bấm vào chấm để xem chi tiết")
+
     widgets = [banner_op, banner_test, operation, test_table, rssi_chart, snr_chart,
-               noise_chart]
+               noise_chart, log, points, field]
     return {
         "title": "Hybrid-LoRa",
         "name": "Hybrid-LoRa",
@@ -342,8 +545,8 @@ def build():
                 "default": {"name": "Vận hành", "root": True,
                             "layouts": layout([banner_op, operation])},
                 "test": {"name": "Test nhanh", "root": False,
-                         "layouts": layout([banner_test, test_table, rssi_chart, snr_chart,
-                                            noise_chart])},
+                         "layouts": layout([banner_test, test_table, points, field, log,
+                                            rssi_chart, snr_chart, noise_chart])},
             },
             "entityAliases": {
                 GATEWAY_ALIAS_ID: {"id": GATEWAY_ALIAS_ID, "alias": "Gateway",

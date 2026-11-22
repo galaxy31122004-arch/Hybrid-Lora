@@ -1,0 +1,123 @@
+Start testing: Nov 16 07:46 SE Asia Standard Time
+----------------------------------------------------------
+1/8 Testing: packet_tests
+1/8 Test: packet_tests
+Command: "D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz/packet_tests.exe"
+Directory: D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz
+"packet_tests" start time: Nov 16 07:46 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"packet_tests" end time: Nov 16 07:46 SE Asia Standard Time
+"packet_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/8 Testing: packet_semantics_tests
+2/8 Test: packet_semantics_tests
+Command: "D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz/packet_semantics_tests.exe"
+Directory: D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz
+"packet_semantics_tests" start time: Nov 16 07:46 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"packet_semantics_tests" end time: Nov 16 07:46 SE Asia Standard Time
+"packet_semantics_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/8 Testing: gateway_state_tests
+3/8 Test: gateway_state_tests
+Command: "D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz/gateway_state_tests.exe"
+Directory: D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz
+"gateway_state_tests" start time: Nov 16 07:46 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"gateway_state_tests" end time: Nov 16 07:46 SE Asia Standard Time
+"gateway_state_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/8 Testing: protocol_v040_tests
+4/8 Test: protocol_v040_tests
+Command: "D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz/protocol_v040_tests.exe"
+Directory: D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz
+"protocol_v040_tests" start time: Nov 16 07:46 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"protocol_v040_tests" end time: Nov 16 07:46 SE Asia Standard Time
+"protocol_v040_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/8 Testing: protocol_v050_tests
+5/8 Test: protocol_v050_tests
+Command: "D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz/protocol_v050_tests.exe"
+Directory: D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz
+"protocol_v050_tests" start time: Nov 16 07:46 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"protocol_v050_tests" end time: Nov 16 07:46 SE Asia Standard Time
+"protocol_v050_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/8 Testing: protocol_v051_tests
+6/8 Test: protocol_v051_tests
+Command: "D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz/protocol_v051_tests.exe"
+Directory: D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz
+"protocol_v051_tests" start time: Nov 16 07:46 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"protocol_v051_tests" end time: Nov 16 07:46 SE Asia Standard Time
+"protocol_v051_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/8 Testing: protocol_v052_tests
+7/8 Test: protocol_v052_tests
+Command: "D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz/protocol_v052_tests.exe"
+Directory: D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz
+"protocol_v052_tests" start time: Nov 16 07:46 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"protocol_v052_tests" end time: Nov 16 07:46 SE Asia Standard Time
+"protocol_v052_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/8 Testing: protocol_v053_tests
+8/8 Test: protocol_v053_tests
+Command: "D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz/protocol_v053_tests.exe"
+Directory: D:/Hybrid_lora/Hybrid-Lora/sandbox/build-review-250khz
+"protocol_v053_tests" start time: Nov 16 07:46 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"protocol_v053_tests" end time: Nov 16 07:46 SE Asia Standard Time
+"protocol_v053_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 16 07:46 SE Asia Standard Time

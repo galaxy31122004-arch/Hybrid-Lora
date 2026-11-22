@@ -2,3 +2,6 @@
 .pio-core/
 firmware/*/common/cloud_config_local.h
 releases/
+
+# Serial monitor logs (scripts/monitor.ps1)
+logs/

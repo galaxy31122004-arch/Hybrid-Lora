@@ -1,0 +1,2 @@
+C:\Users\letha\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\ar.exe qc libhybrid_lora_packet.a CMakeFiles/hybrid_lora_packet.dir/lib/packet/packet.cpp.obj
+C:\Users\letha\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\ranlib.exe libhybrid_lora_packet.a
